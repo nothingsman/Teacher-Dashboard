@@ -935,6 +935,89 @@ export default function App() {
     return { rate, late, absent, present, total: totalClasses };
   };
 
+  const handleExportCSV = () => {
+    const view = attendanceView;
+    if (view === "Day") return;
+
+    const dates = daysInView.filter((d) => {
+      const normalized = new Date(d);
+      normalized.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (normalized > today) return false;
+      if (view === "Week") return d.getDay() >= 1 && d.getDay() <= 5;
+      return true;
+    });
+
+    const dateHeaders = dates.map((d) => toLocalISODate(d));
+    const statusLabels: Record<string, string> = {
+      present: "P",
+      late: "L",
+      absent: "A",
+      excused: "E",
+    };
+
+    const rows: string[][] = [];
+
+    rows.push(["Student Name", "Roll No", ...dateHeaders, "Attendance Rate"]);
+
+    sectionStudents.forEach((student) => {
+      let totalClasses = 0;
+      let presentOrLate = 0;
+      const dayStatuses = dates.map((d) => {
+        const key = d.toDateString();
+        const st = attendance[key]?.[student.id]?.status;
+        if (st) {
+          totalClasses++;
+          if (st === "present" || st === "late") presentOrLate++;
+          return statusLabels[st] || st;
+        }
+        return "—";
+      });
+      const rate =
+        totalClasses > 0
+          ? `${Math.round((presentOrLate / totalClasses) * 100)}%`
+          : "—";
+      rows.push([student.name, student.rollNo || "—", ...dayStatuses, rate]);
+    });
+
+    let totalPresentOrLate = 0;
+    let totalRecorded = 0;
+    dates.forEach((d) => {
+      const key = d.toDateString();
+      const dayData = attendance[key] || {};
+      Object.values(dayData).forEach((entry) => {
+        totalRecorded++;
+        if (entry.status === "present" || entry.status === "late")
+          totalPresentOrLate++;
+      });
+    });
+    const overallRate =
+      totalRecorded > 0
+        ? `${Math.round((totalPresentOrLate / totalRecorded) * 100)}%`
+        : "—";
+    rows.push([
+      "Overall",
+      "",
+      ...dates.map(() => ""),
+      overallRate,
+    ]);
+
+    const csvContent = rows
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `attendance-${view}-summary-${toLocalISODate(new Date())}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const stats = getDayStats(selectedDate);
 
   // Generate days for scroller
@@ -1708,8 +1791,8 @@ export default function App() {
                             isSelected
                               ? "bg-[#1A237E] border-[#1A237E] text-white shadow-lg shadow-blue-900/20 scale-105"
                               : isWeekend
-                                ? "bg-slate-50/50 border-transparent text-slate-300"
-                                : "bg-slate-50 border-transparent text-slate-500 hover:border-slate-200"
+                                ? `bg-slate-50/50 ${isToday ? "border-slate-300" : "border-transparent"} text-slate-300`
+                                : `bg-slate-50 ${isToday ? "border-slate-300" : "border-transparent"} text-slate-500 hover:border-slate-200`
                           }`}
                         >
                           <span
@@ -1723,13 +1806,7 @@ export default function App() {
                             {date.getDate()}
                           </span>
                           {isToday && (
-                            <div className="mt-2 flex items-center gap-2">
-                              {isSelected ? (
-                                <span className="text-[10px] font-black uppercase tracking-tight text-emerald-200 px-2 py-0.5 rounded bg-emerald-600">ACTIVE</span>
-                              ) : (
-                                <div className="w-2 h-2 rounded-full bg-[#1A237E] mt-1" />
-                              )}
-                            </div>
+                            <div className={`w-2 h-2 rounded-full mt-2 ${isSelected ? "bg-white" : "bg-[#1A237E]"}`} />
                           )}
                         </button>
                       );
@@ -2243,7 +2320,10 @@ export default function App() {
 
                 {(attendanceView !== "Day" || isSelectedDateToday) && (
                   <div className="p-8 bg-slate-50/50 border-t border-slate-50">
-                    <button className="w-full py-4 bg-[#1A237E] text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:bg-blue-900 transition-all">
+                    <button
+                      onClick={attendanceView !== "Day" ? handleExportCSV : undefined}
+                      className="w-full py-4 bg-[#1A237E] text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:bg-blue-900 transition-all"
+                    >
                       {attendanceView === "Day"
                         ? "Submit Attendance Report"
                         : `Export ${attendanceView}ly Summary`}
