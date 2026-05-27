@@ -62,6 +62,8 @@ import {
   logoutTeacher,
   getTeacherSections,
 } from "../services";
+import { createAttendanceRecord } from "../services/attendanceService";
+import { getStudentsBySectionId } from "../services";
 import { getAccessToken } from "../services/authStore";
 import type {
   Student,
@@ -272,6 +274,8 @@ export default function App() {
 
   // Student and Attendance State
   const [students, setStudents] = useState<Student[]>([]);
+  const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
+  const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
 
   useEffect(() => {
     if (!authChecked) return;
@@ -279,6 +283,8 @@ export default function App() {
       .then(setStudents)
       .catch(() => {});
   }, [authChecked]);
+
+  // ...existing code...
 
   const [notifications, setNotifications] = useState<
     import("../services").Notification[]
@@ -375,6 +381,20 @@ export default function App() {
     );
   }, [selectedSubject, subjectOptions]);
 
+  // Update student count for active section (run after activeSection is available)
+  useEffect(() => {
+    if (!authChecked || !activeSection) return;
+    getStudentsBySectionId(activeSection.sectionId)
+      .then((s) => {
+        setSectionStudentCount(s.length);
+        setSectionStudents(s);
+      })
+      .catch(() => {
+        setSectionStudentCount(0);
+        setSectionStudents([]);
+      });
+  }, [authChecked, activeSection]);
+
   // Initialize grade on first load
   useEffect(() => {
     if (isLoadingSections || teacherSections.length === 0) return;
@@ -436,13 +456,27 @@ export default function App() {
         [dateKey]: { ...currentDay, [studentId]: status },
       };
     });
+
+    if (!activeSection) return;
+    const apiStatus = status.toUpperCase() as "PRESENT" | "ABSENT" | "LATE";
+    const date = selectedDate.toISOString().split("T")[0];
+
+    void createAttendanceRecord({
+      academic_year: activeSection.academicYearId,
+      section: activeSection.sectionId,
+      student: studentId,
+      date,
+      status: apiStatus,
+    }).catch((error) => {
+      console.error("❌ Failed to create attendance record:", error);
+    });
   };
 
   const markAllPresent = () => {
     const dateKey = selectedDate.toDateString();
     setAttendance((prev) => {
       const nextDay = { ...(prev[dateKey] || {}) };
-      students.forEach((s) => {
+      sectionStudents.forEach((s) => {
         nextDay[s.id] = "present";
       });
       return { ...prev, [dateKey]: nextDay };
@@ -456,7 +490,7 @@ export default function App() {
     ).length;
     const late = Object.values(dayData).filter((v) => v === "late").length;
     const absent = Object.values(dayData).filter((v) => v === "absent").length;
-    return { present, late, absent, total: students.length };
+    return { present, late, absent, total: sectionStudents.length };
   };
 
   const getStudentLifecycleStats = (studentId: string) => {
@@ -752,7 +786,7 @@ export default function App() {
             icon={Users}
             label="Students"
             isActive={activeTab === "Students"}
-            count={students.length}
+            count={sectionStudentCount}
             onClick={() => setActiveTab("Students")}
           />
           <SidebarItem
@@ -1319,7 +1353,7 @@ export default function App() {
                 </div>
 
                 <div className="p-2 space-y-1">
-                  {students
+                  {sectionStudents
                     .filter((s) => {
                       if (
                         attendanceFilter === "all" ||
@@ -1376,7 +1410,7 @@ export default function App() {
                               </div>
                               <span className="text-[9px] font-mono text-slate-400 tabular-nums uppercase tracking-tighter">
                                 {attendanceView === "Day"
-                                  ? `ID: EGA-7A-0${i + 1}`
+                                  ? `ROLL: ${student.rollNo ?? "—"}`
                                   : "Academic Profile Active"}
                               </span>
                             </div>

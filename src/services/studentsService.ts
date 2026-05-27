@@ -27,6 +27,18 @@ export interface Student {
   parentPhone: string;
   parentEmail: string;
 
+  // Extra profile fields (from backend)
+  rollNo?: string;
+  gender?: "MALE" | "FEMALE" | "OTHER";
+  dateOfBirth?: string;
+  admissionDate?: string;
+  academicYearName?: string;
+  branchName?: string;
+  organizationName?: string;
+  gradeName?: string;
+  sectionName?: string;
+  gradeLevel?: number;
+
   // Avatar / initials (HomeworksModule, AnalyticsCharts)
   avatar?: string;
 
@@ -289,6 +301,16 @@ function mapStudentFromApi(api: StudentApi): Student {
     parentPhone: "", // TODO: Fetch from backend parent relationship
     parentEmail: "", // TODO: Fetch from backend parent relationship
     avatar: initials,
+    rollNo: api.roll_no,
+    gender: api.gender,
+    dateOfBirth: api.date_of_birth,
+    admissionDate: api.admission_date,
+    academicYearName: api.academic_year_name,
+    branchName: api.branch_name,
+    organizationName: api.organization_name,
+    gradeName: api.grade_name,
+    sectionName: api.section_name,
+    gradeLevel: api.grade_level,
   };
 }
 

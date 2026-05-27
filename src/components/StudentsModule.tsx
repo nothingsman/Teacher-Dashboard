@@ -39,6 +39,16 @@ interface Student {
   parentName: string;
   parentPhone: string;
   parentEmail: string;
+  rollNo?: string;
+  gender?: "MALE" | "FEMALE" | "OTHER";
+  dateOfBirth?: string;
+  admissionDate?: string;
+  academicYearName?: string;
+  branchName?: string;
+  organizationName?: string;
+  gradeName?: string;
+  sectionName?: string;
+  gradeLevel?: number;
 }
 
 // --- Mock Data ---
@@ -426,7 +436,7 @@ const StudentsModule = ({
                   >
                     <td className="hidden sm:table-cell px-6 py-4">
                       <span className="text-[11px] font-mono font-medium text-slate-400 tracking-tight">
-                        {student.id}
+                        {student.rollNo ?? student.id}
                       </span>
                     </td>
                     <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 px-6 py-4 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
@@ -560,7 +570,7 @@ const StudentsModule = ({
                   </h3>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-xs font-mono font-medium text-slate-400">
-                      {selectedStudent.id}
+                      {selectedStudent.rollNo ?? selectedStudent.id}
                     </span>
                     <Badge status={selectedStudent.status} />
                   </div>
@@ -623,15 +633,31 @@ const StudentsModule = ({
                             Gender
                           </p>
                           <p className="text-sm font-bold text-slate-800">
-                            Female
+                            {selectedStudent.gender ?? "—"}
                           </p>
                         </div>
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                            Nationality
+                            Academic Year
                           </p>
                           <p className="text-sm font-bold text-slate-800">
-                            Ethiopian
+                            {selectedStudent.academicYearName ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                            Branch
+                          </p>
+                          <p className="text-sm font-bold text-slate-800">
+                            {selectedStudent.branchName ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                            Roll Number
+                          </p>
+                          <p className="text-sm font-bold text-slate-800">
+                            {selectedStudent.rollNo ?? "—"}
                           </p>
                         </div>
                       </div>

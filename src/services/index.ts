@@ -31,6 +31,7 @@ export { ApiError } from "./apiClient";
 export * from "./activitiesService";
 export * from "./studentsService";
 export * from "./assessmentsService";
+export * from "./attendanceService";
 // gradebookService: explicit re-export to avoid _resetMockStore collision
 export { getGrades, saveGrade } from "./gradebookService";
 export * from "./analyticsService";
@@ -56,3 +57,4 @@ export * from "./profileService";
 export * from "./authService";
 export * from "./teacherSectionsService";
 export * from "./userProfileStore";
+export * from "./attendanceService";
