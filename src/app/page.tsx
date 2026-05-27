@@ -38,6 +38,7 @@ import {
   User,
   Pencil,
   LogOut,
+  MessageSquareWarning,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import StudentsModule from "../components/StudentsModule";
@@ -55,6 +56,7 @@ import { THREADS_DATA } from "../components/MessagesModule";
 import type { Thread } from "../services";
 import {
   getStudents,
+  getStudentsBySectionId,
   getNotifications,
   markAllNotificationsRead,
   getStudentAnalytics,
@@ -62,10 +64,15 @@ import {
   logoutTeacher,
   getTeacherSections,
 } from "../services";
-import { createAttendanceRecord } from "../services/attendanceService";
-import { getStudentsBySectionId } from "../services";
+import {
+  bulkSubmitAttendance,
+  createAttendanceRecord,
+  getAttendanceBySectionDate,
+  updateAttendanceRecord,
+} from "../services/attendanceService";
 import { getAccessToken } from "../services/authStore";
 import type {
+  AttendanceListItem,
   Student,
   TeacherProfile,
   StudentAnalytics,
@@ -251,6 +258,48 @@ export default function App() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  const toLocalISODate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const selectedDateISO = toLocalISODate(selectedDate);
+  const todayISO = toLocalISODate(new Date());
+  const isSelectedDateReadOnly = selectedDateISO > todayISO;
+  const isSelectedDateToday = selectedDateISO === todayISO;
+
+  type ToastKind = "error" | "info" | "success";
+  type Toast = { id: string; kind: ToastKind; message: string };
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const pushToast = (kind: ToastKind, message: string) => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToasts((prev) => [...prev, { id, kind, message }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  };
+
+  const formatErrorMessage = (err: unknown, fallback: string) => {
+    if (!err) return fallback;
+    if (typeof err === "string") return err;
+    if (err instanceof Error) {
+      const anyErr = err as any;
+      if (typeof anyErr.status === "number") {
+        if (anyErr.status === 0)
+          return "Network error. Check your connection and try again.";
+        if (anyErr.status === 401)
+          return "Your session expired. Please sign in again.";
+        if (anyErr.status === 403)
+          return "You don't have permission to perform this action.";
+      }
+      return err.message || fallback;
+    }
+    return fallback;
+  };
+
   useEffect(() => {
     const token = getAccessToken();
     if (!token) {
@@ -338,9 +387,90 @@ export default function App() {
       .finally(() => setIsLoadingSections(false));
   }, [authChecked]);
 
+  type AttendanceUiStatus = "present" | "absent" | "late" | "excused";
+  type AttendanceUiEntry = {
+    status: AttendanceUiStatus;
+    id?: string;
+    remarks?: string;
+    needsReason?: boolean;
+  };
+
   const [attendance, setAttendance] = useState<
-    Record<string, Record<string, "present" | "absent" | "late">>
+    Record<string, Record<string, AttendanceUiEntry>>
   >({});
+
+  const [attendanceLoadingKeys, setAttendanceLoadingKeys] = useState<
+    Record<string, boolean>
+  >({});
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [openRemarksForStudentId, setOpenRemarksForStudentId] = useState<
+    string | null
+  >(null);
+  const [remarksDraftByStudentId, setRemarksDraftByStudentId] = useState<
+    Record<string, string>
+  >({});
+
+  const normalizeAttendanceStatus = (status?: string) => {
+    if (!status) return null;
+    switch (status) {
+      case "PRESENT":
+        return "present" as const;
+      case "ABSENT":
+        return "absent" as const;
+      case "EXCUSED":
+        return "excused" as const;
+      case "LATE":
+        return "late" as const;
+      default:
+        return null;
+    }
+  };
+
+  const buildAttendanceMap = (records: AttendanceListItem[]) => {
+    return records.reduce(
+      (acc, record) => {
+        const normalized = normalizeAttendanceStatus(record.status);
+        if (!normalized) return acc;
+        acc[record.student] = {
+          status: normalized,
+          id: record.id,
+          remarks: record.remarks,
+          needsReason: record.needs_reason,
+        };
+        return acc;
+      },
+      {} as Record<string, AttendanceUiEntry>,
+    );
+  };
+
+  const isAbsentLike = (status?: string) => {
+    return status === "absent" || status === "excused";
+  };
+
+  const isReasonRequiredLike = (status?: AttendanceUiStatus | null) => {
+    return status === "absent" || status === "late" || status === "excused";
+  };
+
+  const getStatusColor = (
+    status?: AttendanceUiStatus | null,
+    opts?: { loading?: boolean; future?: boolean },
+  ) => {
+    if (opts?.future) return "bg-slate-50 text-slate-200";
+    if (opts?.loading) return "bg-slate-50 text-slate-300 animate-pulse";
+    if (!status) return "bg-slate-50 text-slate-300";
+    if (status === "present") return "bg-emerald-50 text-emerald-600";
+    if (status === "late") return "bg-amber-50 text-amber-600";
+    if (status === "absent") return "bg-red-50 text-red-600";
+    return "bg-[#1A237E]/5 text-[#1A237E]";
+  };
+
+  const getDotFill = (status?: AttendanceUiStatus | null) => {
+    if (!status) return "bg-slate-300";
+    if (status === "present") return "bg-emerald-500";
+    if (status === "late") return "bg-amber-500";
+    if (status === "absent") return "bg-red-500";
+    return "bg-[#1A237E]";
+  };
 
   const gradeOptions = React.useMemo(() => {
     const seen = new Set<string>();
@@ -381,19 +511,159 @@ export default function App() {
     );
   }, [selectedSubject, subjectOptions]);
 
-  // Update student count for active section (run after activeSection is available)
+  const getWeekStart = (date: Date) => {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const day = start.getDay(); // 0..6 (Sun..Sat)
+    start.setDate(start.getDate() - day);
+    return start;
+  };
+
+  const getWeekDates = (date: Date) => {
+    const start = getWeekStart(date);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  };
+
+  const getMonthDates = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return Array.from({ length: lastDay }, (_, i) => new Date(year, month, i + 1));
+  };
+
+  const mapWithConcurrency = async <T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T) => Promise<R>,
+  ): Promise<R[]> => {
+    const results: R[] = new Array(items.length);
+    let nextIndex = 0;
+
+    const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+      while (nextIndex < items.length) {
+        const current = nextIndex++;
+        results[current] = await fn(items[current]);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
+  };
+
+  const ensureAttendanceDaysLoaded = async (sectionId: string, dates: Date[]) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const missingDates = dates.filter((d) => {
+      const normalized = new Date(d);
+      normalized.setHours(0, 0, 0, 0);
+      if (normalized > today) return false;
+      const dateKey = normalized.toDateString();
+      return !attendance[dateKey];
+    });
+
+    if (missingDates.length === 0) return;
+
+    setAttendanceError(null);
+    setAttendanceLoadingKeys((prev) => {
+      const next = { ...prev };
+      missingDates.forEach((d) => {
+        next[d.toDateString()] = true;
+      });
+      return next;
+    });
+
+    try {
+      await mapWithConcurrency(missingDates, 4, async (d) => {
+        const iso = toLocalISODate(d);
+        const dateKey = d.toDateString();
+        const records = await getAttendanceBySectionDate(sectionId, iso);
+        const map = buildAttendanceMap(records);
+        setAttendance((prev) => ({ ...prev, [dateKey]: map }));
+        return true;
+      });
+    } catch (err) {
+      setAttendanceError(formatErrorMessage(err, "Failed to load attendance."));
+      pushToast("error", formatErrorMessage(err, "Failed to load attendance."));
+    } finally {
+      setAttendanceLoadingKeys((prev) => {
+        const next = { ...prev };
+        missingDates.forEach((d) => {
+          delete next[d.toDateString()];
+        });
+        return next;
+      });
+    }
+  };
+
+  // Load section roster + attendance statuses
   useEffect(() => {
     if (!authChecked || !activeSection) return;
-    getStudentsBySectionId(activeSection.sectionId)
-      .then((s) => {
-        setSectionStudentCount(s.length);
-        setSectionStudents(s);
-      })
-      .catch(() => {
+
+    let cancelled = false;
+    const date = selectedDateISO;
+    const dateKey = selectedDate.toDateString();
+
+    (async () => {
+      try {
+        const roster = await getStudentsBySectionId(
+          activeSection.sectionId,
+          activeSection.academicYearId,
+        );
+        if (cancelled) return;
+
+        setSectionStudentCount(roster.length);
+        setSectionStudents(roster);
+
+        if (attendanceView === "Day") {
+          let records: AttendanceListItem[] = [];
+          try {
+            records = await getAttendanceBySectionDate(
+              activeSection.sectionId,
+              date,
+            );
+          } catch (err) {
+            const message = formatErrorMessage(
+              err,
+              "Failed to load attendance for the selected date.",
+            );
+            setAttendanceError(message);
+            pushToast("error", message);
+            records = [];
+          }
+          if (cancelled) return;
+          const attendanceMap = buildAttendanceMap(records);
+          setAttendance((prev) => ({ ...prev, [dateKey]: attendanceMap }));
+          return;
+        }
+
+        const datesToLoad =
+          attendanceView === "Week" ? getWeekDates(viewDate) : getMonthDates(viewDate);
+        await ensureAttendanceDaysLoaded(activeSection.sectionId, datesToLoad);
+      } catch (err) {
+        if (cancelled) return;
+        setAttendanceError(formatErrorMessage(err, "Failed to load attendance."));
+        pushToast("error", formatErrorMessage(err, "Failed to load attendance."));
         setSectionStudentCount(0);
         setSectionStudents([]);
-      });
-  }, [authChecked, activeSection]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authChecked,
+    activeSection?.sectionId,
+    activeSection?.academicYearId,
+    selectedDateISO,
+    attendanceView,
+    viewDate,
+  ]);
 
   // Initialize grade on first load
   useEffect(() => {
@@ -440,56 +710,207 @@ export default function App() {
 
   const updateAttendance = (
     studentId: string,
-    status: "present" | "absent" | "late",
+    status: "present" | "absent" | "late" | "excused",
   ) => {
+    if (isSelectedDateReadOnly) return;
     const dateKey = selectedDate.toDateString();
+    const existingRecord = attendance[dateKey]?.[studentId];
     setAttendance((prev) => {
       const currentDay = prev[dateKey] || {};
+      const current = currentDay[studentId];
       // Toggle off if clicking the same status
-      if (currentDay[studentId] === status) {
+      if (current?.status === status) {
         const nextDay = { ...currentDay };
         delete nextDay[studentId];
         return { ...prev, [dateKey]: nextDay };
       }
       return {
         ...prev,
-        [dateKey]: { ...currentDay, [studentId]: status },
+        [dateKey]: {
+          ...currentDay,
+          [studentId]: {
+            status,
+            id: current?.id,
+            remarks: current?.remarks,
+            needsReason: current?.needsReason,
+          },
+        },
       };
     });
 
-    if (!activeSection) return;
-    const apiStatus = status.toUpperCase() as "PRESENT" | "ABSENT" | "LATE";
-    const date = selectedDate.toISOString().split("T")[0];
+    if (existingRecord?.status === status) return;
 
+    if (!activeSection) return;
+    const apiStatus = status.toUpperCase() as
+      | "PRESENT"
+      | "ABSENT"
+      | "LATE"
+      | "EXCUSED";
+    const date = selectedDateISO;
+
+    if (existingRecord?.id) {
+      void updateAttendanceRecord(existingRecord.id, {
+        status: apiStatus,
+      }).catch((error) => {
+        console.error("❌ Failed to update attendance record:", error);
+        pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+      });
+      return;
+    }
+
+    const existingRemarks = attendance[dateKey]?.[studentId]?.remarks;
     void createAttendanceRecord({
       academic_year: activeSection.academicYearId,
       section: activeSection.sectionId,
       student: studentId,
       date,
       status: apiStatus,
-    }).catch((error) => {
-      console.error("❌ Failed to create attendance record:", error);
+      remarks: existingRemarks,
+    })
+      .then((record) => {
+        if (!record) return;
+        setAttendance((prev) => {
+          const currentDay = prev[dateKey] || {};
+          if (!currentDay[studentId]) return prev;
+          return {
+            ...prev,
+            [dateKey]: {
+              ...currentDay,
+              [studentId]: {
+                status: currentDay[studentId].status,
+                id: record.id,
+                remarks: currentDay[studentId].remarks,
+                needsReason: currentDay[studentId].needsReason,
+              },
+            },
+          };
+        });
+      })
+      .catch((error) => {
+        console.error("❌ Failed to create attendance record:", error);
+        pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+      });
+  };
+
+  const saveAttendanceRemarks = async (studentId: string, remarks: string) => {
+    if (isSelectedDateReadOnly) return;
+    const dateKey = selectedDate.toDateString();
+    const entry = attendance[dateKey]?.[studentId];
+
+    if (!entry?.status) {
+      pushToast("info", "Mark attendance first, then add remarks.");
+      return;
+    }
+
+    setAttendance((prev) => {
+      const currentDay = prev[dateKey] || {};
+      const current = currentDay[studentId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [dateKey]: {
+          ...currentDay,
+          [studentId]: { ...current, remarks },
+        },
+      };
     });
+
+    if (!activeSection) return;
+    const apiStatus = entry.status.toUpperCase() as
+      | "PRESENT"
+      | "ABSENT"
+      | "LATE"
+      | "EXCUSED";
+    const date = selectedDateISO;
+
+    try {
+      if (entry.id) {
+        await updateAttendanceRecord(entry.id, { remarks, status: apiStatus });
+      } else {
+        const record = await createAttendanceRecord({
+          academic_year: activeSection.academicYearId,
+          section: activeSection.sectionId,
+          student: studentId,
+          date,
+          status: apiStatus,
+          remarks,
+        });
+        if (record?.id) {
+          setAttendance((prev) => {
+            const currentDay = prev[dateKey] || {};
+            const current = currentDay[studentId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [dateKey]: {
+                ...currentDay,
+                [studentId]: { ...current, id: record.id },
+              },
+            };
+          });
+        }
+      }
+      pushToast("success", "Remarks saved.");
+    } catch (err) {
+      pushToast("error", formatErrorMessage(err, "Failed to save remarks."));
+    }
   };
 
   const markAllPresent = () => {
+    if (isSelectedDateReadOnly) return;
     const dateKey = selectedDate.toDateString();
     setAttendance((prev) => {
       const nextDay = { ...(prev[dateKey] || {}) };
       sectionStudents.forEach((s) => {
-        nextDay[s.id] = "present";
+        nextDay[s.id] = { status: "present" };
       });
       return { ...prev, [dateKey]: nextDay };
     });
+
+    if (!activeSection) return;
+    const date = selectedDateISO;
+    void bulkSubmitAttendance({
+      section: activeSection.sectionId,
+      academic_year: activeSection.academicYearId,
+      date,
+      records: sectionStudents.map((student) => ({
+        student: student.id,
+        status: "PRESENT" as const,
+      })),
+    })
+      .then((records) => {
+        if (records.length === 0) return;
+        setAttendance((prev) => {
+          const currentDay = prev[dateKey] || {};
+          const updatedDay = { ...currentDay };
+          records.forEach((record) => {
+            const existing = updatedDay[record.student];
+            if (!existing) return;
+            updatedDay[record.student] = {
+              status: existing.status,
+              id: record.id,
+              remarks: existing.remarks,
+              needsReason: existing.needsReason,
+            };
+          });
+          return { ...prev, [dateKey]: updatedDay };
+        });
+      })
+      .catch((error) => {
+        console.error("❌ Failed to bulk submit attendance:", error);
+        pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+      });
   };
 
   const getDayStats = (date: Date) => {
     const dayData = attendance[date.toDateString()] || {};
     const present = Object.values(dayData).filter(
-      (v) => v === "present",
+      (v) => v.status === "present",
     ).length;
-    const late = Object.values(dayData).filter((v) => v === "late").length;
-    const absent = Object.values(dayData).filter((v) => v === "absent").length;
+    const late = Object.values(dayData).filter((v) => v.status === "late")
+      .length;
+    const absent = Object.values(dayData).filter((v) => isAbsentLike(v.status))
+      .length;
     return { present, late, absent, total: sectionStudents.length };
   };
 
@@ -503,9 +924,9 @@ export default function App() {
       const dayData = attendance[dateStr];
       if (dayData[studentId]) {
         totalClasses++;
-        if (dayData[studentId] === "present") present++;
-        if (dayData[studentId] === "late") late++;
-        if (dayData[studentId] === "absent") absent++;
+        if (dayData[studentId].status === "present") present++;
+        if (dayData[studentId].status === "late") late++;
+        if (isAbsentLike(dayData[studentId].status)) absent++;
       }
     });
 
@@ -516,34 +937,44 @@ export default function App() {
 
   const stats = getDayStats(selectedDate);
 
-  // Generate days for scroller (either full month or specific week)
+  // Generate days for scroller
   const daysInView = React.useMemo(() => {
-    if (attendanceView === "Day") {
-      const start = new Date(viewDate);
-      const day = start.getDay();
-      start.setDate(start.getDate() - day);
-      return Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(start);
-        d.setDate(d.getDate() + i);
-        return d;
-      });
+    if (attendanceView === "Month") {
+      return getMonthDates(viewDate);
     }
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    return Array.from(
-      { length: lastDay },
-      (_, i) => new Date(year, month, i + 1),
-    );
+    return getWeekDates(viewDate);
   }, [viewDate, attendanceView]);
+
+  const rangeAttendanceSummary = React.useMemo(() => {
+    if (attendanceView === "Day") return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let totalRecorded = 0;
+    let presentOrLate = 0;
+
+    daysInView.forEach((d) => {
+      const normalized = new Date(d);
+      normalized.setHours(0, 0, 0, 0);
+      if (normalized > today) return;
+      const key = d.toDateString();
+      sectionStudents.forEach((s) => {
+        const st = attendance[key]?.[s.id]?.status;
+        if (!st) return;
+        totalRecorded++;
+        if (st === "present" || st === "late") presentOrLate++;
+      });
+    });
+
+    if (totalRecorded === 0) return { text: "—", totalRecorded };
+    const rate = Math.round((presentOrLate / totalRecorded) * 100);
+    return { text: `${rate}%`, totalRecorded };
+  }, [attendanceView, daysInView, attendance, sectionStudents]);
 
   const adjustView = (offset: number) => {
     const next = new Date(viewDate);
-    if (attendanceView === "Day") {
-      next.setDate(next.getDate() + offset * 7);
-    } else {
-      next.setMonth(next.getMonth() + offset);
-    }
+    if (attendanceView === "Month") next.setMonth(next.getMonth() + offset);
+    else next.setDate(next.getDate() + offset * 7);
     setViewDate(next);
   };
 
@@ -895,6 +1326,43 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="lg:ml-64 flex-1 flex flex-col min-w-0">
+        {/* Toasts */}
+        <div className="fixed top-4 right-4 z-[80] space-y-2 w-[min(360px,calc(100vw-2rem))]">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-sm ${
+                t.kind === "error"
+                  ? "bg-rose-50/95 border-rose-200 text-rose-800"
+                  : t.kind === "success"
+                    ? "bg-emerald-50/95 border-emerald-200 text-emerald-800"
+                    : "bg-slate-50/95 border-slate-200 text-slate-700"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  {t.kind === "error" ? (
+                    <MessageSquareWarning size={16} className="mt-0.5" />
+                  ) : (
+                    <Info size={16} className="mt-0.5" />
+                  )}
+                  <p className="text-sm font-semibold leading-snug">
+                    {t.message}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setToasts((prev) => prev.filter((x) => x.id !== t.id))
+                  }
+                  className="text-xs font-black uppercase tracking-widest opacity-60 hover:opacity-100"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
         {/* Mobile Header */}
         <header className="lg:hidden h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between sticky top-0 z-40">
           <button
@@ -1085,6 +1553,25 @@ export default function App() {
 
           {activeTab === "Attendance" && (
             <div className="flex-1 space-y-6">
+              {attendanceError && (
+                <div className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 text-rose-800 shadow-sm flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <MessageSquareWarning size={18} className="mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold">Attendance error</p>
+                      <p className="text-sm text-rose-700">{attendanceError}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceError(null)}
+                    className="text-[10px] font-black uppercase tracking-widest opacity-70 hover:opacity-100"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
               {/* Enhanced Calendar Navigation */}
               <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -1235,8 +1722,14 @@ export default function App() {
                           <span className="text-xl font-mono font-black leading-tight">
                             {date.getDate()}
                           </span>
-                          {isToday && !isSelected && (
-                            <div className="w-1 h-1 rounded-full bg-[#1A237E] mt-1" />
+                          {isToday && (
+                            <div className="mt-2 flex items-center gap-2">
+                              {isSelected ? (
+                                <span className="text-[10px] font-black uppercase tracking-tight text-emerald-200 px-2 py-0.5 rounded bg-emerald-600">ACTIVE</span>
+                              ) : (
+                                <div className="w-2 h-2 rounded-full bg-[#1A237E] mt-1" />
+                              )}
+                            </div>
                           )}
                         </button>
                       );
@@ -1275,7 +1768,12 @@ export default function App() {
                     {attendanceView === "Day" && (
                       <button
                         onClick={markAllPresent}
-                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-2 w-full sm:w-auto"
+                        disabled={isSelectedDateReadOnly}
+                        className={`px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 transition-all shadow-sm flex items-center gap-2 w-full sm:w-auto ${
+                          isSelectedDateReadOnly
+                            ? "opacity-50 cursor-not-allowed"
+                            : "hover:bg-emerald-600 hover:text-white"
+                        }`}
                       >
                         <Sparkles size={12} />
                         Mark All Present
@@ -1294,14 +1792,14 @@ export default function App() {
                         <p
                           className={`text-[10px] font-black uppercase tracking-widest ${attendanceFilter === "present" ? "text-emerald-600" : "text-slate-400"}`}
                         >
-                          {attendanceView === "Day" ? "Present" : "Avg. Score"}
+                          {attendanceView === "Day" ? "Present" : "Attendance"}
                         </p>
                         <p
                           className={`text-xl font-mono font-bold ${attendanceView === "Day" ? "text-emerald-600" : "text-[#1A237E]"}`}
                         >
                           {attendanceView === "Day"
                             ? `${stats.present}/${stats.total}`
-                            : "94.2%"}
+                            : (rangeAttendanceSummary?.text ?? "—")}
                         </p>
                       </button>
 
@@ -1361,13 +1859,19 @@ export default function App() {
                       )
                         return true;
                       return (
-                        attendance[selectedDate.toDateString()]?.[s.id] ===
-                        attendanceFilter
+                        attendance[selectedDate.toDateString()]?.[s.id]
+                          ?.status === attendanceFilter ||
+                        (attendanceFilter === "absent" &&
+                          isAbsentLike(
+                            attendance[selectedDate.toDateString()]?.[s.id]
+                              ?.status,
+                          ))
                       );
                     })
                     .map((student, i) => {
                       const status =
-                        attendance[selectedDate.toDateString()]?.[student.id];
+                        attendance[selectedDate.toDateString()]?.[student.id]
+                          ?.status;
 
                       return (
                         <div
@@ -1394,7 +1898,9 @@ export default function App() {
                                       ? "bg-emerald-500"
                                       : status === "absent"
                                         ? "bg-red-500"
-                                        : "bg-amber-500"
+                                        : status === "late"
+                                          ? "bg-amber-500"
+                                          : "bg-[#1A237E]"
                                   }`}
                                 />
                               )}
@@ -1407,6 +1913,17 @@ export default function App() {
                                 <span className="hidden sm:inline-block text-[9px] font-black text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest bg-white px-2 py-0.5 rounded-full border border-slate-100">
                                   View Profile
                                 </span>
+                                {(status === "late" || status === "excused") && (
+                                  <span
+                                    className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                      status === "late"
+                                        ? "bg-amber-50 text-amber-600 border-amber-100"
+                                        : "bg-[#1A237E]/5 text-[#1A237E] border-[#1A237E]/10"
+                                    }`}
+                                  >
+                                    {status}
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[9px] font-mono text-slate-400 tabular-nums uppercase tracking-tighter">
                                 {attendanceView === "Day"
@@ -1425,10 +1942,13 @@ export default function App() {
                                 onClick={() =>
                                   updateAttendance(student.id, "present")
                                 }
+                                disabled={isSelectedDateReadOnly}
                                 className={`flex-1 sm:flex-none px-4 md:px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${
                                   status === "present"
                                     ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/20"
-                                    : "bg-white text-emerald-600 border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/50"
+                                    : isSelectedDateReadOnly
+                                      ? "bg-white text-emerald-600 border-slate-100 opacity-50 cursor-not-allowed"
+                                      : "bg-white text-emerald-600 border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/50"
                                 }`}
                               >
                                 Present
@@ -1437,66 +1957,280 @@ export default function App() {
                                 onClick={() =>
                                   updateAttendance(student.id, "absent")
                                 }
+                                disabled={isSelectedDateReadOnly}
                                 className={`flex-1 sm:flex-none px-4 md:px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${
                                   status === "absent"
                                     ? "bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20"
-                                    : "bg-white text-slate-400 border-slate-100 hover:border-red-200 hover:bg-red-50/50"
+                                    : isSelectedDateReadOnly
+                                      ? "bg-white text-slate-400 border-slate-100 opacity-50 cursor-not-allowed"
+                                      : "bg-white text-slate-400 border-slate-100 hover:border-red-200 hover:bg-red-50/50"
                                 }`}
                               >
                                 Absent
                               </button>
+                              <div className="relative flex-1 sm:flex-none">
+                                <select
+                                  value={
+                                    status === "late" || status === "excused"
+                                      ? status
+                                      : ""
+                                  }
+                                  disabled={isSelectedDateReadOnly}
+                                  onChange={(e) => {
+                                    const next = e.target.value as
+                                      | ""
+                                      | "late"
+                                      | "excused";
+
+                                    if (next === "") {
+                                      if (status === "late" || status === "excused") {
+                                        updateAttendance(student.id, status);
+                                      }
+                                      return;
+                                    }
+
+                                    updateAttendance(student.id, next);
+                                  }}
+                                  className={`appearance-none w-full px-4 md:px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap pr-9 ${
+                                    status === "late"
+                                      ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20"
+                                      : status === "excused"
+                                        ? "bg-[#1A237E] text-white border-[#1A237E] shadow-lg shadow-blue-900/20"
+                                        : isSelectedDateReadOnly
+                                          ? "bg-white text-slate-400 border-slate-100 opacity-50 cursor-not-allowed"
+                                          : "bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50/50"
+                                  }`}
+                                >
+                                  <option value="">Other</option>
+                                  <option value="late">Late</option>
+                                  <option value="excused">Excused</option>
+                                </select>
+                                <div
+                                  className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                    status === "late" || status === "excused"
+                                      ? "text-white/80"
+                                      : "text-slate-400"
+                                  }`}
+                                >
+                                  <ChevronDown size={14} />
+                                </div>
+                              </div>
+
                               <button
-                                onClick={() =>
-                                  updateAttendance(student.id, "late")
-                                }
-                                className={`flex-1 sm:flex-none px-4 md:px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${
-                                  status === "late"
-                                    ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20"
-                                    : "bg-white text-slate-400 border-slate-100 hover:border-amber-200 hover:bg-amber-50/50"
+                                type="button"
+                                onClick={() => {
+                                  setOpenRemarksForStudentId((prev) => {
+                                    const next = prev === student.id ? null : student.id;
+                                    return next;
+                                  });
+                                  setRemarksDraftByStudentId((prev) => {
+                                    if (prev[student.id] !== undefined) return prev;
+                                    const dateKey = selectedDate.toDateString();
+                                    const existing =
+                                      attendance[dateKey]?.[student.id]?.remarks ?? "";
+                                    return { ...prev, [student.id]: existing };
+                                  });
+                                }}
+                                disabled={isSelectedDateReadOnly}
+                                className={`flex-1 sm:flex-none px-4 md:px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap flex items-center justify-center gap-2 ${
+                                  isSelectedDateReadOnly
+                                    ? "bg-white text-slate-300 border-slate-100 opacity-50 cursor-not-allowed"
+                                    : attendance[selectedDate.toDateString()]?.[student.id]
+                                          ?.remarks
+                                      ? "bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/10 hover:bg-slate-800"
+                                      : "bg-white text-slate-500 border-slate-100 hover:border-slate-200 hover:bg-slate-50/50"
                                 }`}
                               >
-                                Late
+                                Remarks
+                                {(attendance[selectedDate.toDateString()]?.[student.id]
+                                  ?.needsReason ||
+                                  isReasonRequiredLike(status)) && (
+                                  <MessageSquareWarning size={14} />
+                                )}
                               </button>
                             </div>
                           )}
+
+                          {attendanceView === "Day" &&
+                            openRemarksForStudentId === student.id && (
+                              <div
+                                className="w-full sm:max-w-xl sm:ml-auto"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="mt-2 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        Remarks / Reason
+                                      </p>
+                                      {(attendance[selectedDate.toDateString()]?.[student.id]
+                                        ?.needsReason ||
+                                        isReasonRequiredLike(status)) && (
+                                        <p className="mt-1 text-xs text-amber-700 flex items-center gap-2">
+                                          <MessageSquareWarning size={14} />
+                                          Recommended for this status.
+                                        </p>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenRemarksForStudentId(null)
+                                      }
+                                      className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:underline"
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+
+                                  <textarea
+                                    value={
+                                      remarksDraftByStudentId[student.id] ?? ""
+                                    }
+                                    onChange={(e) =>
+                                      setRemarksDraftByStudentId((prev) => ({
+                                        ...prev,
+                                        [student.id]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="Add remarks / reason (optional)"
+                                    rows={3}
+                                    className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                                  />
+
+                                  <div className="mt-3 flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenRemarksForStudentId(null)
+                                      }
+                                      className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-100 text-slate-500 hover:bg-slate-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const value =
+                                          (remarksDraftByStudentId[student.id] ?? "")
+                                            .trim();
+                                        void saveAttendanceRemarks(
+                                          student.id,
+                                          value,
+                                        );
+                                        setOpenRemarksForStudentId(null);
+                                      }}
+                                      className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
 
                           {/* Week/Month views remain as context... */}
 
                           {attendanceView === "Week" && (
                             <div className="flex items-center gap-2">
-                              {[0, 1, 2, 3, 4].map((d) => (
+                              {[1, 2, 3, 4, 5].map((d) => {
+                                const date = daysInView[d];
+                                const dateKey = date?.toDateString();
+                                const iso = date ? toLocalISODate(date) : null;
+                                const isFuture = !!iso && iso > todayISO;
+                                const isLoading =
+                                  !!(dateKey && attendanceLoadingKeys[dateKey]);
+                                const dayStatus = dateKey
+                                  ? attendance[dateKey]?.[student.id]?.status
+                                  : null;
+                                const label = ["M", "T", "W", "T", "F"][d - 1];
+
+                                return (
                                 <div
                                   key={d}
                                   className="flex flex-col items-center"
                                 >
                                   <span className="text-[7px] font-bold text-slate-300 mb-1 leading-none">
-                                    {"MTWTF"[d]}
+                                    {label}
                                   </span>
                                   <div
-                                    className={`w-6 h-6 rounded-lg ${d % 3 === 0 ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-300"} flex items-center justify-center border border-white shadow-sm ring-1 ring-slate-100`}
+                                    className={`w-6 h-6 rounded-lg ${getStatusColor(dayStatus, { loading: isLoading, future: isFuture })} flex items-center justify-center border border-white shadow-sm ring-1 ring-slate-100`}
+                                    title={
+                                      !date
+                                        ? ""
+                                        : isFuture
+                                          ? `${formatDate(date)} (future)`
+                                          : dayStatus
+                                            ? `${formatDate(date)}: ${dayStatus}`
+                                            : `${formatDate(date)}: not recorded`
+                                    }
                                   >
                                     <div
-                                      className={`w-1.5 h-1.5 rounded-full ${d % 3 === 0 ? "bg-emerald-500" : "bg-slate-300"}`}
+                                      className={`w-1.5 h-1.5 rounded-full ${isLoading ? "bg-slate-300" : getDotFill(dayStatus)}`}
                                     />
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
 
                           {attendanceView === "Month" && (
                             <div className="flex items-center gap-6">
-                              <div className="text-right">
-                                <span className="text-xs font-mono font-bold text-slate-700">
-                                  {90 + (i % 10)}%
-                                </span>
-                              </div>
-                              <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-emerald-500 rounded-full"
-                                  style={{ width: `${90 + (i % 10)}%` }}
-                                />
-                              </div>
+                              {(() => {
+                                const monthDates = daysInView;
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+
+                                let totalRecorded = 0;
+                                let presentOrLate = 0;
+
+                                monthDates.forEach((d) => {
+                                  const normalized = new Date(d);
+                                  normalized.setHours(0, 0, 0, 0);
+                                  if (normalized > today) return;
+                                  const key = d.toDateString();
+                                  const st = attendance[key]?.[student.id]?.status;
+                                  if (!st) return;
+                                  totalRecorded++;
+                                  if (st === "present" || st === "late") presentOrLate++;
+                                });
+
+                                const rate =
+                                  totalRecorded > 0
+                                    ? Math.round((presentOrLate / totalRecorded) * 100)
+                                    : null;
+
+                                const barColor =
+                                  rate === null
+                                    ? "bg-slate-200"
+                                    : rate >= 90
+                                      ? "bg-emerald-500"
+                                      : rate >= 75
+                                        ? "bg-amber-500"
+                                        : "bg-red-500";
+
+                                return (
+                                  <>
+                                    <div className="text-right">
+                                      <span className="text-xs font-mono font-bold text-slate-700">
+                                        {rate === null ? "—" : `${rate}%`}
+                                      </span>
+                                      <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                                        {totalRecorded === 0
+                                          ? "No data"
+                                          : `${totalRecorded} day${totalRecorded === 1 ? "" : "s"}`}
+                                      </p>
+                                    </div>
+                                    <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full ${barColor} rounded-full`}
+                                        style={{ width: `${rate ?? 0}%` }}
+                                      />
+                                    </div>
+                                  </>
+                                );
+                              })()}
                               <button className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:bg-[#1A237E] hover:text-white transition-all">
                                 <ChevronRight size={14} />
                               </button>
@@ -1507,13 +2241,15 @@ export default function App() {
                     })}
                 </div>
 
-                <div className="p-8 bg-slate-50/50 border-t border-slate-50">
-                  <button className="w-full py-4 bg-[#1A237E] text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:bg-blue-900 transition-all">
-                    {attendanceView === "Day"
-                      ? "Submit Attendance Report"
-                      : `Export ${attendanceView}ly Summary`}
-                  </button>
-                </div>
+                {(attendanceView !== "Day" || isSelectedDateToday) && (
+                  <div className="p-8 bg-slate-50/50 border-t border-slate-50">
+                    <button className="w-full py-4 bg-[#1A237E] text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:bg-blue-900 transition-all">
+                      {attendanceView === "Day"
+                        ? "Submit Attendance Report"
+                        : `Export ${attendanceView}ly Summary`}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1720,13 +2456,14 @@ export default function App() {
                       const d = new Date();
                       d.setDate(d.getDate() - (29 - i));
                       const status =
-                        attendance[d.toDateString()]?.[selectedStudentId!];
+                        attendance[d.toDateString()]?.[selectedStudentId!]
+                          ?.status;
                       const height =
                         status === "present"
                           ? 100
                           : status === "late"
                             ? 60
-                            : status === "absent"
+                            : isAbsentLike(status)
                               ? 20
                               : 5;
                       const color =
@@ -1734,7 +2471,9 @@ export default function App() {
                           ? "bg-emerald-500"
                           : status === "late"
                             ? "bg-amber-500"
-                            : status === "absent"
+                            : status === "excused"
+                              ? "bg-[#1A237E]"
+                              : status === "absent"
                               ? "bg-red-500"
                               : "bg-slate-200";
 
@@ -1772,7 +2511,7 @@ export default function App() {
                         const status =
                           attendance[date.toDateString()]?.[
                             selectedStudentId!
-                          ] || "No Data";
+                          ]?.status || "No Data";
                         return (
                           <div
                             key={i}
@@ -1795,6 +2534,8 @@ export default function App() {
                                     ? "bg-red-50 text-red-600"
                                     : status === "late"
                                       ? "bg-amber-50 text-amber-600"
+                                      : status === "excused"
+                                        ? "bg-[#1A237E]/5 text-[#1A237E]"
                                       : "bg-slate-50 text-slate-300"
                               }`}
                             >
