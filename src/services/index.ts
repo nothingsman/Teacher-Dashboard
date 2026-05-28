@@ -11,6 +11,12 @@ export type {
 export type { GradeRecord } from "./gradebookService";
 export type { SectionAnalytics, StudentAnalytics } from "./analyticsService";
 export type { Assessment, AssessmentCreate } from "./assessmentsService";
+export type {
+  AssessmentResult,
+  SubmissionStatus,
+  BulkGradePayload,
+  BulkGradeItem,
+} from "./assessmentResultsService";
 export type { DailyEntry } from "./homeworkService";
 export type {
   Thread,
@@ -58,3 +64,4 @@ export * from "./authService";
 export * from "./teacherSectionsService";
 export * from "./userProfileStore";
 export * from "./attendanceService";
+export * from "./assessmentResultsService";

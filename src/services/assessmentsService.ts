@@ -9,6 +9,7 @@ import {
 } from "./authStore";
 import { ensureTeacherOrgBranch } from "./profileService";
 import { getUserProfile } from "./userProfileStore";
+import { getCached, setCache, invalidateCache, buildCacheKey } from "./apiCache";
 
 const IS_MOCK = !process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -334,25 +335,15 @@ export async function getAssessments(
   const query = params.toString();
   const endpoint = query ? `/api/assessments/?${query}` : "/api/assessments/";
 
-  console.group("� Assessment Request");
-  console.log("Endpoint:", endpoint);
-  console.log("Query Params:", {
-    teacher: filters.teacherId,
-    section: filters.sectionId,
-    subject: filters.subjectId,
-    organizationId: filters.organizationId,
-    branchId: filters.branchId,
-    teacherAssignmentId: filters.teacherAssignmentId,
-    taskType: filters.taskType,
-    status: filters.status,
-  });
+  const cacheKey = buildCacheKey("assessments", filters as Record<string, unknown>);
+  const cached = getCached<Assessment[]>(cacheKey);
+  if (cached) return cached;
 
   const data = await request<AssessmentListApi>("GET", endpoint);
 
-  console.log("Response:", data);
-  console.groupEnd();
-
-  return normalizeAssessmentList(data).map(mapAssessment);
+  const result = normalizeAssessmentList(data).map(mapAssessment);
+  setCache(cacheKey, result);
+  return result;
 }
 
 export async function getAssessmentsForContext(
@@ -461,6 +452,7 @@ export async function createAssessment(
     "/api/assessments/",
     buildPayload(enriched),
   );
+  invalidateCache("assessments");
   return mapAssessment(data);
 }
 
@@ -518,6 +510,7 @@ export async function updateAssessment(
     `/api/assessments/${id}/`,
     buildPayload(enriched),
   );
+  invalidateCache("assessments");
   return mapAssessment(data);
 }
 
@@ -528,4 +521,5 @@ export async function deleteAssessment(id: string): Promise<void> {
     return;
   }
   await request<void>("DELETE", `/api/assessments/${id}/`);
+  invalidateCache("assessments");
 }

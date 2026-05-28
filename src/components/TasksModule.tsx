@@ -526,9 +526,11 @@ function AssessmentCard({ assessment, onEdit, onDelete }: AssessmentCardProps) {
 export default function TasksModule({
   activeSection,
   selectedSubject,
+  onCountChange,
 }: {
   activeSection?: TeacherSection;
   selectedSubject: string;
+  onCountChange?: (count: number) => void;
 }) {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -601,18 +603,24 @@ export default function TasksModule({
     return true;
   });
 
+  const nonHomeworkCount = React.useMemo(
+    () => assessments.filter((a) => a.taskType !== "HOMEWORK").length,
+    [assessments],
+  );
+
+  useEffect(() => {
+    onCountChange?.(nonHomeworkCount);
+  }, [nonHomeworkCount, onCountChange]);
+
   const counts = React.useMemo(() => {
-    // Filter out homeworks from counts (they are in their own module)
-    const nonHomeworkAssessments = assessments.filter(
-      (a) => a.taskType !== "HOMEWORK",
-    );
-    const c: Record<string, number> = { ALL: nonHomeworkAssessments.length };
-    for (const a of nonHomeworkAssessments) {
+    const c: Record<string, number> = { ALL: nonHomeworkCount };
+    for (const a of assessments) {
+      if (a.taskType === "HOMEWORK") continue;
       c[a.taskType] = (c[a.taskType] ?? 0) + 1;
       c[a.status] = (c[a.status] ?? 0) + 1;
     }
     return c;
-  }, [assessments]);
+  }, [assessments, nonHomeworkCount]);
 
   return (
     <div className="flex-1 space-y-6">

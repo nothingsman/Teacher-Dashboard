@@ -70,6 +70,7 @@ import {
   getAttendanceBySectionDate,
   updateAttendanceRecord,
 } from "../services/attendanceService";
+import { getAssessmentsForContext } from "../services/assessmentsService";
 import { getAccessToken } from "../services/authStore";
 import type {
   AttendanceListItem,
@@ -324,6 +325,7 @@ export default function App() {
   // Student and Attendance State
   const [students, setStudents] = useState<Student[]>([]);
   const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
+  const [taskCount, setTaskCount] = useState<number>(0);
   const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
 
   useEffect(() => {
@@ -664,6 +666,36 @@ export default function App() {
     attendanceView,
     viewDate,
   ]);
+
+  // Fetch task count for sidebar badge
+  useEffect(() => {
+    if (!activeSection) return;
+    const subject = activeSection.subjects.find(
+      (s) => s.subjectName === selectedSubject,
+    );
+    if (!subject) {
+      setTaskCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getAssessmentsForContext({
+          sectionId: activeSection.sectionId,
+          subjectId: subject.subjectId,
+          academicYearId: activeSection.academicYearId,
+        });
+        if (cancelled) return;
+        const nonHomework = data.filter(
+          (a) => a.taskType !== "HOMEWORK",
+        );
+        setTaskCount(nonHomework.length);
+      } catch {
+        if (!cancelled) setTaskCount(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeSection?.sectionId, selectedSubject]);
 
   // Initialize grade on first load
   useEffect(() => {
@@ -1307,7 +1339,7 @@ export default function App() {
             icon={ClipboardList}
             label="Tasks"
             isActive={activeTab === "Tasks"}
-            count={3}
+            count={taskCount}
             onClick={() => setActiveTab("Tasks")}
           />
           <SidebarItem
@@ -1602,6 +1634,7 @@ export default function App() {
             <TasksModule
               activeSection={activeSection}
               selectedSubject={selectedSubject}
+              onCountChange={setTaskCount}
             />
           )}
           {activeTab === "Analytics" && (
@@ -1631,6 +1664,8 @@ export default function App() {
             <GradebookModule
               defaultGrade={globalGrade}
               defaultSection={globalSection}
+              activeSection={activeSection}
+              selectedSubject={selectedSubject}
             />
           )}
 

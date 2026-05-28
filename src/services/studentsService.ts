@@ -4,6 +4,7 @@
  */
 
 import { request } from "./apiClient";
+import { getCached, setCache, buildCacheKey } from "./apiCache";
 
 const IS_MOCK = !process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -347,11 +348,17 @@ export async function getStudentsBySectionId(
 ): Promise<Student[]> {
   if (IS_MOCK) return [...mockStore];
 
+  const cacheKey = buildCacheKey("students-by-section", {
+    section: sectionId,
+    academic_year: academicYear,
+  });
+  const cached = getCached<Student[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     const params = new URLSearchParams();
     params.set("section", sectionId);
     if (academicYear) params.set("academic_year", academicYear);
-    // params.set("status", "ACTIVE"); // Only fetch active students
 
     const query = params.toString();
     const endpoint = `/api/students/by-section/?${query}`;
@@ -369,7 +376,6 @@ export async function getStudentsBySectionId(
       endpoint,
     );
 
-    // Normalize response to array
     const results = Array.isArray(response)
       ? response
       : (response as StudentListResponse).results || [];
@@ -377,7 +383,9 @@ export async function getStudentsBySectionId(
     console.log("Response:", { count: results.length, results });
     console.groupEnd();
 
-    return results.map(mapStudentFromApi);
+    const mapped = results.map(mapStudentFromApi);
+    setCache(cacheKey, mapped);
+    return mapped;
   } catch (error) {
     console.error("❌ Failed to fetch students by section:", error);
     return IS_MOCK ? [...mockStore] : [];
