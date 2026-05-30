@@ -122,65 +122,10 @@ export async function getEntries(
     params.set('from', dateRange.from);
     params.set('to', dateRange.to);
   }
-  return request<DailyEntry[]>('GET', `/homework?${params.toString()}`);
-}
-
-/**
- * Creates a new entry, generates an ID, adds to store, returns the created entry.
- * Requirements: 6.3
- */
-export async function createEntry(
-  entry: Omit<DailyEntry, 'id'>
-): Promise<DailyEntry> {
-  if (IS_MOCK) {
-    const created: DailyEntry = { ...entry, id: generateId() };
-    mockStore = [...mockStore, created];
-    return created;
-  }
-  return request<DailyEntry>('POST', '/homework', entry);
-}
-
-/**
- * Merges scores into the entry, returns the updated entry.
- * Returns null if the entry is not found.
- * Requirements: 6.4
- */
-export async function updateEntryScores(
-  entryId: string,
-  scores: Record<string, number | null>
-): Promise<DailyEntry | null> {
-  if (IS_MOCK) {
-    const index = mockStore.findIndex(e => e.id === entryId);
-    if (index === -1) return null;
-    const updated: DailyEntry = {
-      ...mockStore[index],
-      scores: { ...mockStore[index].scores, ...scores }
-    };
-    mockStore = mockStore.map(e => e.id === entryId ? updated : e);
-    return updated;
-  }
-  return request<DailyEntry>('PATCH', `/homework/${entryId}/scores`, { scores });
-}
-
-/**
- * Flips parentVisible on the entry, returns the updated entry.
- * Returns null if the entry is not found.
- * Requirements: 6.5
- */
-export async function toggleParentVisibility(
-  entryId: string
-): Promise<DailyEntry | null> {
-  if (IS_MOCK) {
-    const index = mockStore.findIndex(e => e.id === entryId);
-    if (index === -1) return null;
-    const updated: DailyEntry = {
-      ...mockStore[index],
-      parentVisible: !mockStore[index].parentVisible
-    };
-    mockStore = mockStore.map(e => e.id === entryId ? updated : e);
-    return updated;
-  }
-  return request<DailyEntry>('PATCH', `/homework/${entryId}/visibility`);
+  return request<DailyEntry[]>('GET', `/api/homework?${params.toString()}`);
+  return request<DailyEntry>('POST', '/api/homework', entry);
+  return request<DailyEntry>('PATCH', `/api/homework/${entryId}/scores`, { scores });
+  return request<DailyEntry>('PATCH', `/api/homework/${entryId}/visibility`);
 }
 
 /**

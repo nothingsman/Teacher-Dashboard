@@ -294,74 +294,9 @@ export function _resetMockStore(): void {
  */
 export async function getThreads(): Promise<Thread[]> {
   if (IS_MOCK) return [...mockStore];
-  return request<Thread[]>('GET', '/threads');
-}
-
-/**
- * Appends a new message (with a generated ID) to the specified thread.
- * Returns the updated thread, or null if the thread is not found.
- */
-export async function sendMessage(
-  threadId: string,
-  message: Omit<Message, 'id'>
-): Promise<Thread | null> {
-  if (IS_MOCK) {
-    const newMessage: Message = { ...message, id: `M-${Date.now()}` };
-    let updatedThread: Thread | null = null;
-    mockStore = mockStore.map((t) => {
-      if (t.id === threadId) {
-        updatedThread = { ...t, messages: [...t.messages, newMessage] };
-        return updatedThread;
-      }
-      return t;
-    });
-    return updatedThread;
-  }
-  return request<Thread>('POST', `/threads/${threadId}/messages`, message);
-}
-
-/**
- * Sets unread: false on the matching thread.
- */
-export async function markThreadRead(threadId: string): Promise<void> {
-  if (IS_MOCK) {
-    mockStore = mockStore.map((t) =>
-      t.id === threadId ? { ...t, unread: false } : t
-    );
-    return;
-  }
-  return request<void>('PATCH', `/threads/${threadId}/read`);
-}
-
-/**
- * Sets unread: false on all threads.
- */
-export async function markAllRead(): Promise<void> {
-  if (IS_MOCK) {
-    mockStore = mockStore.map((t) => ({ ...t, unread: false }));
-    return;
-  }
-  return request<void>('POST', '/threads/mark-all-read');
-}
-
-/**
- * Merges changes into the specified thread.
- * Returns the updated thread, or null if the thread is not found.
- */
-export async function updateParentInfo(
-  threadId: string,
-  changes: Partial<Thread>
-): Promise<Thread | null> {
-  if (IS_MOCK) {
-    let updatedThread: Thread | null = null;
-    mockStore = mockStore.map((t) => {
-      if (t.id === threadId) {
-        updatedThread = { ...t, ...changes };
-        return updatedThread;
-      }
-      return t;
-    });
-    return updatedThread;
-  }
-  return request<Thread>('PATCH', `/threads/${threadId}`, changes);
+  return request<Thread[]>('GET', '/api/threads');
+  return request<Thread>('POST', `/api/threads/${threadId}/messages`, message);
+  return request<void>('PATCH', `/api/threads/${threadId}/read`);
+  return request<void>('POST', '/api/threads/mark-all-read');
+  return request<Thread>('PATCH', `/api/threads/${threadId}`, changes);
 }

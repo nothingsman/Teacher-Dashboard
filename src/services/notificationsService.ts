@@ -44,7 +44,7 @@ export function _setMockStore(notifications: Notification[]): void {
  */
 export async function getNotifications(): Promise<Notification[]> {
   if (IS_MOCK) return [...mockStore];
-  return request<Notification[]>('GET', '/notifications');
+  return request<Notification[]>('GET', '/api/notifications');
 }
 
 /**
@@ -56,5 +56,5 @@ export async function markAllNotificationsRead(): Promise<Notification[]> {
     mockStore = mockStore.map((n) => ({ ...n, read: true }));
     return [...mockStore];
   }
-  return request<Notification[]>('POST', '/notifications/mark-all-read');
+  return request<Notification[]>('POST', '/api/notifications/mark-all-read');
 }

@@ -257,66 +257,8 @@ export async function getActivities(): Promise<Activity[]> {
   if (IS_MOCK) {
     return loadActivities();
   }
-  return request<Activity[]>('GET', '/activities');
-}
-
-/**
- * Creates a new activity.
- *
- * Mock mode: appends to localStorage and dispatches the reactivity event.
- * Real mode: POST /activities
- */
-export async function createActivity(activity: Activity): Promise<Activity> {
-  if (IS_MOCK) {
-    const current = loadActivities();
-    const updated = [...current, activity];
-    persistActivities(updated);
-    dispatchUpdatedEvent();
-    return activity;
-  }
-  return request<Activity>('POST', '/activities', activity);
-}
-
-/**
- * Updates an existing activity by ID.
- *
- * Mock mode: merges changes, persists, and dispatches the reactivity event.
- * Real mode: PATCH /activities/:id
- */
-export async function updateActivity(
-  id: string,
-  changes: Partial<Activity>
-): Promise<Activity | null> {
-  if (IS_MOCK) {
-    const current = loadActivities();
-    let updated: Activity | null = null;
-    const next = current.map((a) => {
-      if (a.id === id) {
-        updated = { ...a, ...changes };
-        return updated;
-      }
-      return a;
-    });
-    persistActivities(next);
-    dispatchUpdatedEvent();
-    return updated;
-  }
-  return request<Activity>('PATCH', `/activities/${id}`, changes);
-}
-
-/**
- * Deletes an activity by ID.
- *
- * Mock mode: filters out the activity, persists, and dispatches the reactivity event.
- * Real mode: DELETE /activities/:id
- */
-export async function deleteActivity(id: string): Promise<void> {
-  if (IS_MOCK) {
-    const current = loadActivities();
-    const next = current.filter((a) => a.id !== id);
-    persistActivities(next);
-    dispatchUpdatedEvent();
-    return;
-  }
-  return request<void>('DELETE', `/activities/${id}`);
+  return request<Activity[]>('GET', '/api/activities');
+  return request<Activity>('POST', '/api/activities', activity);
+  return request<Activity>('PATCH', `/api/activities/${id}`, changes);
+  return request<void>('DELETE', `/api/activities/${id}`);
 }

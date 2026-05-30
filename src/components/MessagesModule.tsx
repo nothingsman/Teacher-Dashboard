@@ -31,7 +31,6 @@ import { motion, AnimatePresence } from 'motion/react';
 export type { Attachment, Message, StudentSnapshot, Thread } from '../services/messagesService';
 export { THREADS_DATA } from '../services/messagesService';
 
-import { THREADS_DATA } from '../services/messagesService';
 import type { Attachment, Message, Thread } from '../services/messagesService';
 
 // --- Helpers ---
@@ -98,7 +97,7 @@ const MessagesModule = ({ externalThreadId, onThreadChange, threads, onThreadsUp
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  const [newMsgStudentId, setNewMsgStudentId] = useState(THREADS_DATA[0].studentId);
+  const [newMsgStudentId, setNewMsgStudentId] = useState(threads[0]?.studentId ?? "");
   const [newMsgText, setNewMsgText] = useState("");
 
   const chatBodyRef = useRef<HTMLDivElement>(null);

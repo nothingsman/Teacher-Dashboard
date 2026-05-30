@@ -52,7 +52,7 @@ const SummaryCard = ({ label, value, subtitle, color, icon: Icon }: { label: str
   );
 };
 
-const AnalyticsModule = () => {
+const AnalyticsModule = ({ globalGrade, globalSection, activeSection }: { globalGrade?: string; globalSection?: string; activeSection?: any }) => {
   const { activities } = useSharedActivities(); // satisfying component import requirement
   
   const [selectedSection, setSelectedSection] = useState<string>("Grade 7 — Section A");

@@ -95,7 +95,14 @@ const StatusPill = ({ status }: { status: ActivityStatus }) => {
 
 // --- Main ActivitiesModule Component ---
 
-const ActivitiesModule = () => {
+interface ActivitiesModuleProps {
+  globalGrade?: string;
+  globalSection?: string;
+  selectedSubject?: string;
+  activeSection?: any;
+}
+
+const ActivitiesModule = ({ globalGrade, globalSection, selectedSubject, activeSection }: ActivitiesModuleProps) => {
   const { activities, addActivity, updateActivity, deleteActivity } = useSharedActivities();
   const [activeFilter, setActiveFilter] = useState<'All' | ActivityType>('All');
   const [selectedId, setSelectedId] = useState<string | null>(null);

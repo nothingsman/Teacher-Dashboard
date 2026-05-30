@@ -97,7 +97,7 @@ export async function getGrades(activityId: string): Promise<GradeRecord[]> {
       score,
     }));
   }
-  return request<GradeRecord[]>('GET', `/grades/${activityId}`);
+  return request<GradeRecord[]>('GET', `/api/grades/${activityId}`);
 }
 
 /**
@@ -116,7 +116,7 @@ export async function saveGrade(
     mockStore[activityId][studentId] = score;
     return { studentId, activityId, score };
   }
-  return request<GradeRecord>('PUT', `/grades/${activityId}/${studentId}`, { score });
+  return request<GradeRecord>('PUT', `/api/grades/${activityId}/${studentId}`, { score });
 }
 
 /**

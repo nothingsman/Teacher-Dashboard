@@ -1,0 +1,173 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useState, type FormEvent } from "react";
+import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
+import { motion } from "motion/react";
+import { useRouter } from "next/navigation";
+import { loginTeacher } from "../../services";
+import { getAccessToken } from "../../services/authStore";
+
+function formatAuthError(message: string): string {
+  if (!message) return "Login failed. Please try again.";
+  if (message.includes("401")) return "Invalid email or password.";
+  return message;
+}
+
+export default function TeacherLoginPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const existingToken = getAccessToken();
+    if (existingToken) {
+      router.replace("/");
+    }
+  }, [router]);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    if (!email || !password) {
+      setError("Email and password are required.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await loginTeacher(email, password);
+
+      router.replace("/");
+    } catch (err) {
+      setError(formatAuthError((err as Error).message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+        <div className="absolute inset-0">
+          <Image
+            src="https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200&h=1200&fit=crop&q=80"
+            alt="Teacher workspace"
+            fill
+            priority
+            quality={85}
+            sizes="50vw"
+            className="object-cover opacity-40"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/50 to-transparent" />
+        </div>
+        <div className="relative z-10 flex flex-col justify-end p-12 text-white">
+          <h2 className="text-3xl font-bold mb-4">Welcome back, teacher</h2>
+          <p className="max-w-md text-base text-slate-300 md:text-lg">
+            Sign in to manage classes, track progress, and stay in sync with parents and students.
+          </p>
+          <div className="mt-8 flex items-center gap-2 text-sm text-slate-400">
+            <span>Photo by</span>
+            <a
+              href="https://unsplash.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white transition-colors"
+            >
+              Unsplash
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-white">
+        <div className="w-full max-w-md">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Teacher login</h1>
+              <p className="text-slate-600">
+                Use the email from your invitation.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-rose-700">{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="text-sm font-medium text-slate-700">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="teacher@school.com"
+                    className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900/40 transition-all text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-sm font-medium text-slate-700">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900/40 transition-all text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition disabled:opacity-60"
+              >
+                {loading ? "Signing in..." : "Sign in"}
+                <LogIn size={18} />
+              </button>
+            </form>
+
+            <p className="text-xs text-slate-500 mt-6">
+              Need access? Contact your school administrator for an invite.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+}

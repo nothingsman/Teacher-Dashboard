@@ -178,7 +178,7 @@ export async function getTimetable(grade: string, section: string): Promise<Clas
     }
     return slots;
   }
-  return request<ClassSlot[]>('GET', `/schedule/timetable?grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}`);
+  return request<ClassSlot[]>('GET', `/api/schedule/timetable?grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}`);
 }
 
 /**
@@ -186,5 +186,5 @@ export async function getTimetable(grade: string, section: string): Promise<Clas
  */
 export async function getAcademicCalendar(): Promise<CalendarEvent[]> {
   if (IS_MOCK) return [...YEARLY_CALENDAR_DATA];
-  return request<CalendarEvent[]>('GET', '/schedule/calendar');
+  return request<CalendarEvent[]>('GET', '/api/schedule/calendar');
 }
