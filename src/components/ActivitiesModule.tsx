@@ -262,7 +262,7 @@ const ActivitiesModule = ({ globalGrade, globalSection, selectedSubject, activeS
         {/* Left Column: Activity List (Now full width) */}
         <div className="w-full space-y-6 min-w-0">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex bg-slate-100/50 p-1 rounded-full overflow-x-auto no-scrollbar max-w-[calc(100vw-200px)]">
+            <div className="flex bg-slate-100/50 p-1 rounded-full overflow-x-auto no-scrollbar max-w-full">
               {(['All', 'Homework', 'Quiz', 'Project', 'Exam', 'Lab Report', 'Essay', 'Practice Set'] as const).map(f => (
                 <button
                   key={f}
