@@ -1,341 +1,305 @@
-// src/services/messagesService.ts
-
 import { request } from './apiClient';
 
-const IS_MOCK = !process.env.NEXT_PUBLIC_API_BASE_URL;
-
-// --- Types ---
-
-export interface Attachment {
-  type: 'report' | 'homework' | 'voice';
-  title: string;
-  subtitle: string;
-  value: string;
-  duration?: string;
-}
-
-export interface Message {
+export interface ChatThread {
   id: string;
-  sender: 'teacher' | 'parent';
-  text: string;
-  time: string;
-  readAt?: string | null;
-  attachment?: Attachment | null;
+  parent: string;
+  teacher: string;
+  student: string;
+  organization: string;
+  branch: string;
+  unread_count: number;
+  last_read_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface StudentSnapshot {
-  overallAvg: number;
-  attendance: number;
-  parentEngagement: number;
-  recentHomework: { title: string; score: number | null; max: number }[];
+export interface ChatMessage {
+  id: string;
+  thread: string;
+  sender: string;
+  sender_id: string;
+  text: string;
+  attachment: string | null;
+  read_by_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ThreadMessage {
+  id: string;
+  senderId: string;
+  senderRole: 'teacher' | 'parent';
+  text: string;
+  createdAt: string;
+  attachmentId: string | null;
+  readByIds: string[];
+}
+
+export interface MediaFile {
+  id: string;
+  file_name: string;
+  content_type: string;
+  size: number | null;
+  download_url: string | null;
 }
 
 export interface Thread {
   id: string;
+  parentId: string;
+  teacherId: string;
+  studentId: string;
   parentName: string;
   parentInitials: string;
   parentPhone: string;
   parentEmail: string;
-  parentAddress?: string;
-  relation?: string;
   studentName: string;
-  studentId: string;
   studentGrade: string;
-  avatarColor: string;
+  avatarColor: 'blue' | 'teal' | 'purple' | 'amber' | 'green';
   unread: boolean;
+  unreadCount: number;
   lastTime: string;
   preview: string;
-  studentSnapshot: StudentSnapshot;
-  messages: Message[];
+  updatedAt: string;
+  messages: ThreadMessage[];
 }
 
-// --- Mock data ---
+export const THREADS_DATA: Thread[] = [];
 
-export const THREADS_DATA: Thread[] = [
-  {
-    id: 'THR-001',
-    parentName: 'Alemayehu Tadesse',
-    parentInitials: 'AT',
-    parentPhone: '+251 91 234 5678',
-    parentEmail: 'alem.tadesse@mail.com',
-    parentAddress: 'Bole Sub-city, Addis Ababa',
-    relation: 'Father',
-    studentName: 'Liya Tadesse',
-    studentId: 'STU-00421',
-    studentGrade: 'Grade 8A',
-    avatarColor: 'blue',
-    unread: false,
-    lastTime: '9:42 AM',
-    preview: 'Thanks for letting me know about her progress...',
-    studentSnapshot: {
-      overallAvg: 91,
-      attendance: 97,
-      parentEngagement: 85,
-      recentHomework: [
-        { title: 'Linear Equations', score: 9, max: 10 },
-        { title: "Newton's Laws", score: 8, max: 10 },
-        { title: 'WWI Discussion', score: 9, max: 10 },
-        { title: 'Problem Solving', score: 10, max: 10 },
-      ],
-    },
-    messages: [
-      {
-        id: 'M1',
-        sender: 'teacher',
-        text: 'Good morning Mr. Alemayehu. I wanted to share Liya\'s latest progress report with you. She has been doing exceptionally well this term.',
-        time: '9:28 AM',
-        readAt: '9:31 AM',
-        attachment: { type: 'report', title: 'Progress report — Term 2', subtitle: 'Liya Tadesse · Grade 8A', value: '91%' },
-      },
-      {
-        id: 'M2',
-        sender: 'parent',
-        text: 'Wonderful! We are so proud of her. Is there anything she should focus on more?',
-        time: '9:38 AM',
-      },
-      {
-        id: 'M3',
-        sender: 'teacher',
-        text: 'She could improve a bit in Physics. Here is her latest homework score for reference.',
-        time: '9:40 AM',
-        readAt: '9:41 AM',
-        attachment: { type: 'homework', title: "Newton's Laws Questions", subtitle: 'Homework · Physics · Jun 1', value: '8 / 10' },
-      },
-      {
-        id: 'M4',
-        sender: 'parent',
-        text: 'Thanks for letting me know about her progress. We will make sure she reviews her Physics notes at home.',
-        time: '9:42 AM',
-      },
-    ],
-  },
-  {
-    id: 'THR-002',
-    parentName: 'Worku Haile',
-    parentInitials: 'WH',
-    parentPhone: '+251 92 345 6789',
-    parentEmail: 'worku.haile@mail.com',
-    parentAddress: 'Kazanchis, Addis Ababa',
-    relation: 'Father',
-    studentName: 'Biruk Haile',
-    studentId: 'STU-00398',
-    studentGrade: 'Grade 7B',
-    avatarColor: 'teal',
-    unread: true,
-    lastTime: 'Yesterday',
-    preview: 'When is the next parent-teacher meeting?',
-    studentSnapshot: {
-      overallAvg: 73,
-      attendance: 88,
-      parentEngagement: 40,
-      recentHomework: [
-        { title: 'Algebra Practice', score: 7, max: 10 },
-        { title: "Newton's Laws", score: 6, max: 10 },
-        { title: 'WWI Essay', score: 8, max: 10 },
-        { title: 'Problem Solving', score: 7, max: 10 },
-      ],
-    },
-    messages: [
-      {
-        id: 'M1',
-        sender: 'teacher',
-        text: 'Hello Mr. Worku. I wanted to check in about Biruk\'s recent attendance. He has missed 3 classes this week.',
-        time: 'Yesterday, 2:10 PM',
-        readAt: 'Yesterday, 3:45 PM',
-      },
-      {
-        id: 'M2',
-        sender: 'parent',
-        text: 'I apologize, he has been unwell. He will return tomorrow. When is the next parent-teacher meeting?',
-        time: 'Yesterday, 4:22 PM',
-      },
-    ],
-  },
-  {
-    id: 'THR-003',
-    parentName: 'Girma Girma',
-    parentInitials: 'GG',
-    parentPhone: '+251 93 456 7890',
-    parentEmail: 'girma.g@mail.com',
-    parentAddress: 'Old Airport, Addis Ababa',
-    relation: 'Father',
-    studentName: 'Selam Girma',
-    studentId: 'STU-00412',
-    studentGrade: 'Grade 9A',
-    avatarColor: 'purple',
-    unread: true,
-    lastTime: 'Mon',
-    preview: 'Selam has been struggling with Physics...',
-    studentSnapshot: {
-      overallAvg: 55,
-      attendance: 79,
-      parentEngagement: 20,
-      recentHomework: [
-        { title: 'Algebra Practice', score: 5, max: 10 },
-        { title: "Newton's Laws", score: 4, max: 10 },
-        { title: 'Cell Division', score: 6, max: 10 },
-        { title: 'Problem Solving', score: 5, max: 10 },
-      ],
-    },
-    messages: [
-      {
-        id: 'M1',
-        sender: 'parent',
-        text: 'Good day teacher. Selam has been struggling with Physics lately. Can we discuss this?',
-        time: 'Mon, 10:15 AM',
-      },
-    ],
-  },
-  {
-    id: 'THR-004',
-    parentName: 'Meseret Bekele',
-    parentInitials: 'MB',
-    parentPhone: '+251 94 567 8901',
-    parentEmail: 'meseret.b@mail.com',
-    parentAddress: 'Gerji, Addis Ababa',
-    relation: 'Mother',
-    studentName: 'Dawit Bekele',
-    studentId: 'STU-00355',
-    studentGrade: 'Grade 6C',
-    avatarColor: 'amber',
-    unread: false,
-    lastTime: 'Sun',
-    preview: 'I will talk to him about his attendance',
-    studentSnapshot: {
-      overallAvg: 36,
-      attendance: 65,
-      parentEngagement: 10,
-      recentHomework: [
-        { title: 'Algebra Practice', score: 3, max: 10 },
-        { title: "Newton's Laws", score: 4, max: 10 },
-        { title: 'WWI Discussion', score: null, max: 10 },
-        { title: 'Problem Solving', score: 3, max: 10 },
-      ],
-    },
-    messages: [
-      {
-        id: 'M1',
-        sender: 'teacher',
-        text: 'Dear Mrs. Meseret, I am reaching out regarding Dawit\'s attendance this month. He has been absent 8 times and it is affecting his grades.',
-        time: 'Sun, 11:00 AM',
-        readAt: 'Sun, 6:30 PM',
-      },
-      {
-        id: 'M2',
-        sender: 'parent',
-        text: 'I will talk to him about his attendance. Thank you for informing me.',
-        time: 'Sun, 6:45 PM',
-      },
-    ],
-  },
-  {
-    id: 'THR-005',
-    parentName: 'Tigist Mekonnen',
-    parentInitials: 'TM',
-    parentPhone: '+251 95 678 9012',
-    parentEmail: 'tigist.m@mail.com',
-    parentAddress: 'CMC, Addis Ababa',
-    relation: 'Mother',
-    studentName: 'Hana Mekonnen',
-    studentId: 'STU-00467',
-    studentGrade: 'Grade 8B',
-    avatarColor: 'green',
-    unread: false,
-    lastTime: 'Fri',
-    preview: 'Thank you! She is very happy at school.',
-    studentSnapshot: {
-      overallAvg: 81,
-      attendance: 93,
-      parentEngagement: 70,
-      recentHomework: [
-        { title: 'Linear Equations', score: 8, max: 10 },
-        { title: "Newton's Laws", score: 7, max: 10 },
-        { title: 'WWI Discussion', score: 8, max: 10 },
-        { title: 'Problem Solving', score: 9, max: 10 },
-      ],
-    },
-    messages: [
-      {
-        id: 'M1',
-        sender: 'teacher',
-        text: 'Hello Mrs. Tigist! Just wanted to share that Hana had an excellent week. Her classwork scores have been outstanding.',
-        time: 'Fri, 3:00 PM',
-        readAt: 'Fri, 5:12 PM',
-      },
-      {
-        id: 'M2',
-        sender: 'parent',
-        text: 'Thank you! She is very happy at school. We appreciate your dedication.',
-        time: 'Fri, 5:30 PM',
-      },
-    ],
-  },
-];
-
-// --- In-memory store (mock mode only) ---
-
-let mockStore: Thread[] = [...THREADS_DATA];
-
-/**
- * Resets the in-memory mock store to the original THREADS_DATA.
- * Exported for use in tests only.
- */
-export function _resetMockStore(): void {
-  mockStore = THREADS_DATA.map((t) => ({
-    ...t,
-    messages: [...t.messages],
-  }));
+export interface CreateChatThreadRequest {
+  parent: string;
+  teacher: string;
+  student: string;
 }
 
-// --- Service functions ---
+export interface SendChatMessageRequest {
+  text?: string;
+  attachment?: string;
+}
 
-/**
- * Returns a shallow copy of all threads.
- */
+export interface MarkReadResponse {
+  count: number;
+}
+
+export interface UploadInitResponse {
+  id: string;
+  key: string;
+  upload_id: string;
+  expires_in: number;
+}
+
+export interface MultipartPartUrlResponse {
+  presigned_url: string;
+  expires_in: number;
+}
+
+type PaginatedThreadsResponse = {
+  count: number;
+  next?: string | null;
+  previous?: string | null;
+  results: ChatThread[];
+};
+
+export function formatThreadTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+export function buildChatWebsocketUrl(threadId: string, token: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string;
+  const url = new URL(baseUrl);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `/ws/chat/threads/${threadId}/`;
+  url.search = `token=${encodeURIComponent(token)}`;
+  return url.toString();
+}
+
+export async function listChatThreads(): Promise<ChatThread[]> {
+  const response = await request<ChatThread[] | PaginatedThreadsResponse>(
+    'GET',
+    '/api/chat-threads/',
+  );
+  return Array.isArray(response) ? response : response.results ?? [];
+}
+
+export async function createChatThread(
+  body: CreateChatThreadRequest
+): Promise<ChatThread> {
+  return request<ChatThread>('POST', '/api/chat-threads/', body);
+}
+
+export async function listThreadMessages(threadId: string): Promise<ChatMessage[]> {
+  return request<ChatMessage[]>('GET', `/api/chat-threads/${threadId}/messages/`);
+}
+
+export async function sendChatMessage(
+  threadId: string,
+  body: SendChatMessageRequest
+): Promise<ChatMessage> {
+  return request<ChatMessage>('POST', `/api/chat-threads/${threadId}/messages/`, body);
+}
+
+export async function markThreadRead(
+  threadId: string,
+  messageId?: string
+): Promise<MarkReadResponse> {
+  return request<MarkReadResponse>(
+    'POST',
+    `/api/chat-threads/${threadId}/mark-read/`,
+    messageId ? { message_id: messageId } : {}
+  );
+}
+
+export async function initMultipartUpload(file: File): Promise<UploadInitResponse> {
+  return request<UploadInitResponse>('POST', '/api/media/upload', {
+    file_name: file.name,
+    content_type: file.type || 'application/octet-stream',
+  });
+}
+
+export async function getMultipartPartUrl(
+  mediaId: string,
+  uploadId: string,
+  partNumber: number
+): Promise<MultipartPartUrlResponse> {
+  return request<MultipartPartUrlResponse>(
+    'POST',
+    `/api/media/${mediaId}/multipart/part-url`,
+    {
+      upload_id: uploadId,
+      part_number: partNumber,
+    }
+  );
+}
+
+export async function completeMultipartUpload(
+  mediaId: string,
+  uploadId: string,
+  etag: string
+): Promise<void> {
+  await request(
+    'POST',
+    `/api/media/${mediaId}/multipart/complete`,
+    {
+      upload_id: uploadId,
+      parts: [{ part_number: 1, etag }],
+    }
+  );
+}
+
+export async function uploadChatAttachment(file: File): Promise<string> {
+  const init = await initMultipartUpload(file);
+  const part = await getMultipartPartUrl(init.id, init.upload_id, 1);
+  const response = await fetch(part.presigned_url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to upload attachment.');
+  }
+
+  const etag = (response.headers.get('etag') ?? '').replace(/^"+|"+$/g, '');
+  if (!etag) {
+    throw new Error('Upload completed but attachment verification failed.');
+  }
+
+  await completeMultipartUpload(init.id, init.upload_id, etag);
+  return init.id;
+}
+
+export async function getMediaFile(mediaId: string): Promise<MediaFile> {
+  const response = await request<any>('GET', `/api/media/${mediaId}`);
+  const data = response?.data ?? response;
+  return {
+    id: data.id,
+    file_name: data.file_name,
+    content_type: data.content_type,
+    size: data.size ?? null,
+    download_url: data.download_url ?? null,
+  };
+}
+
+// Legacy compatibility wrappers kept so older tests still compile.
 export async function getThreads(): Promise<Thread[]> {
-  if (IS_MOCK) return [...mockStore];
-  return request<Thread[]>('GET', '/api/threads');
+  return [];
 }
 
-export async function sendMessage(threadId: string, message: { text: string; sender?: string; time?: string }): Promise<Thread> {
-  if (IS_MOCK) {
-    const thread = mockStore.find((t) => t.id === threadId);
-    if (!thread) throw new Error(`Thread ${threadId} not found`);
-    const newMsg: Message = {
-      id: `M-${Date.now()}`,
-      sender: (message.sender as 'teacher' | 'parent') || 'teacher',
-      text: message.text,
-      time: message.time || new Date().toLocaleTimeString(),
-    };
-    thread.messages.push(newMsg);
-    return thread;
-  }
-  return request<Thread>('POST', `/api/threads/${threadId}/messages`, message);
+export async function sendMessage(
+  threadId: string,
+  body: { text: string; sender?: string; time?: string }
+): Promise<Thread> {
+  const message = await sendChatMessage(threadId, body);
+  return {
+    id: threadId,
+    parentId: "",
+    teacherId: "",
+    studentId: "",
+    parentName: "Parent",
+    parentInitials: "PA",
+    parentPhone: "",
+    parentEmail: "",
+    studentName: "Student",
+    studentGrade: "",
+    avatarColor: "blue",
+    unread: false,
+    unreadCount: 0,
+    lastTime: formatThreadTimestamp(message.created_at),
+    preview: message.text,
+    updatedAt: message.created_at,
+    messages: [toLegacyThreadMessage(message)],
+  };
 }
 
-export async function markThreadRead(threadId: string): Promise<void> {
-  if (IS_MOCK) {
-    const thread = mockStore.find((t) => t.id === threadId);
-    if (thread) thread.unread = false;
-    return;
-  }
-  return request<void>('PATCH', `/api/threads/${threadId}/read`);
+function toLegacyThreadMessage(message: ChatMessage): ThreadMessage {
+  return {
+    id: message.id,
+    senderId: message.sender_id,
+    senderRole: "teacher",
+    text: message.text,
+    createdAt: message.created_at,
+    attachmentId: message.attachment,
+    readByIds: message.read_by_ids,
+  };
 }
 
 export async function markAllRead(): Promise<void> {
-  if (IS_MOCK) {
-    mockStore.forEach((t) => { t.unread = false; });
-    return;
-  }
-  return request<void>('POST', '/api/threads/mark-all-read');
+  return;
 }
 
-export async function updateParentInfo(threadId: string, changes: Partial<Thread>): Promise<Thread> {
-  if (IS_MOCK) {
-    const thread = mockStore.find((t) => t.id === threadId);
-    if (!thread) throw new Error(`Thread ${threadId} not found`);
-    Object.assign(thread, changes);
-    return thread;
-  }
-  return request<Thread>('PATCH', `/api/threads/${threadId}`, changes);
+export function _resetMockStore(): void {
+  return;
+}
+
+export async function updateParentInfo(
+  _threadId: string,
+  changes: Partial<Thread>
+): Promise<Thread> {
+  return {
+    id: changes.id ?? "",
+    parentId: changes.parentId ?? "",
+    teacherId: changes.teacherId ?? "",
+    studentId: changes.studentId ?? "",
+    parentName: changes.parentName ?? "Parent",
+    parentInitials: changes.parentInitials ?? "PA",
+    parentPhone: changes.parentPhone ?? "",
+    parentEmail: changes.parentEmail ?? "",
+    studentName: changes.studentName ?? "Student",
+    studentGrade: changes.studentGrade ?? "",
+    avatarColor: changes.avatarColor ?? "blue",
+    unread: changes.unread ?? false,
+    unreadCount: changes.unreadCount ?? 0,
+    lastTime: changes.lastTime ?? "",
+    preview: changes.preview ?? "",
+    updatedAt: changes.updatedAt ?? "",
+    messages: changes.messages ?? [],
+  };
 }

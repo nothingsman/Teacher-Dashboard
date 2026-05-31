@@ -20,9 +20,10 @@ export type {
 export type { DailyEntry } from "./homeworkService";
 export type {
   Thread,
-  Message,
-  Attachment,
-  StudentSnapshot,
+  ThreadMessage,
+  ChatThread,
+  ChatMessage,
+  MediaFile,
 } from "./messagesService";
 export type { ClassSlot, CalendarEvent } from "./scheduleService";
 export type { Notification } from "./notificationsService";
@@ -48,14 +49,16 @@ export {
   updateEntryScores,
   toggleParentVisibility,
 } from "./homeworkService";
-// messagesService: explicit re-export to avoid _resetMockStore collision
 export {
-  THREADS_DATA,
-  getThreads,
-  sendMessage,
+  listChatThreads,
+  createChatThread,
+  listThreadMessages,
+  sendChatMessage,
   markThreadRead,
-  markAllRead,
-  updateParentInfo,
+  uploadChatAttachment,
+  getMediaFile,
+  buildChatWebsocketUrl,
+  formatThreadTimestamp,
 } from "./messagesService";
 export * from "./scheduleService";
 export * from "./notificationsService";

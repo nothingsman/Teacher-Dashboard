@@ -52,14 +52,18 @@ import {
   PerformanceDistribution,
   ParentEngagementChart,
 } from "../components/AnalyticsCharts";
-import type { Thread } from "../services";
+import type { BranchParent, ChatMessage, ChatThread, Thread } from "../services";
 import {
+  createChatThread,
+  formatThreadTimestamp,
   getStudents,
   getStudentsBySectionId,
   getNotifications,
   markAllNotificationsRead,
   getStudentAnalytics,
   getTeacherProfile,
+  listChatThreads,
+  listThreadMessages,
   logoutTeacher,
   getTeacherSections,
 } from "../services";
@@ -70,7 +74,7 @@ import {
   updateAttendanceRecord,
 } from "../services/attendanceService";
 import { getAssessmentsForContext } from "../services/assessmentsService";
-import { getAccessToken } from "../services/authStore";
+import { getAccessToken, getTeacherId } from "../services/authStore";
 import { HomeroomProvider } from "../contexts/HomeroomContext";
 import { checkHomeroomStatus } from "../services/homeroomService";
 import { fetchSchoolName } from "../services/schoolService";
@@ -236,6 +240,74 @@ const TimelineItem = ({
   </div>
 );
 
+const THREAD_AVATAR_COLORS: Thread["avatarColor"][] = [
+  "blue",
+  "teal",
+  "purple",
+  "amber",
+  "green",
+];
+
+function buildThreadPreview(messages: ChatMessage[]) {
+  const latest = messages[messages.length - 1];
+  if (!latest) {
+    return { preview: "", lastTime: "", updatedAt: "" };
+  }
+  return {
+    preview: latest.text?.trim() || (latest.attachment ? "Attachment shared" : ""),
+    lastTime: formatThreadTimestamp(latest.created_at),
+    updatedAt: latest.created_at,
+  };
+}
+
+function toThreadView(
+  thread: ChatThread,
+  messages: ChatMessage[],
+  students: Student[],
+  parents: BranchParent[],
+): Thread {
+  const student = students.find((item) => item.id === thread.student);
+  const parent =
+    parents.find((item) => item.parentId === thread.parent) ||
+    parents.find((item) => item.studentIds.includes(thread.student));
+  const preview = buildThreadPreview(messages);
+  const colorSeed = [...thread.id].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+  return {
+    id: thread.id,
+    parentId: thread.parent,
+    teacherId: thread.teacher,
+    studentId: thread.student,
+    parentName: parent?.parentName || student?.parentName || "Parent",
+    parentInitials:
+      (parent?.parentName || student?.parentName || "Parent")
+        .split(" ")
+        .map((value) => value[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase() || "PA",
+    parentPhone: parent?.parentPhone || student?.parentPhone || "",
+    parentEmail: parent?.parentEmail || student?.parentEmail || "",
+    studentName: student?.name || "Student",
+    studentGrade: student?.section || student?.grade || "",
+    avatarColor: THREAD_AVATAR_COLORS[colorSeed % THREAD_AVATAR_COLORS.length],
+    unread: thread.unread_count > 0,
+    unreadCount: thread.unread_count,
+    lastTime: preview.lastTime || formatThreadTimestamp(thread.updated_at),
+    preview: preview.preview,
+    updatedAt: preview.updatedAt || thread.updated_at,
+    messages: messages.map((message) => ({
+      id: message.id,
+      senderId: message.sender_id,
+      senderRole: message.sender_id === parent?.userId ? "parent" : "teacher",
+      text: message.text,
+      createdAt: message.created_at,
+      attachmentId: message.attachment,
+      readByIds: message.read_by_ids,
+    })),
+  };
+}
+
 // --- Main Dashboard ---
 
 export default function App() {
@@ -371,12 +443,37 @@ export default function App() {
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(
     null,
   );
+  const [branchParents, setBranchParents] = useState<BranchParent[]>([]);
 
   useEffect(() => {
     if (!authChecked) return;
     getTeacherProfile()
       .then(setTeacherProfile)
       .catch(() => {});
+  }, [authChecked]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const orgInfo = await ensureTeacherOrgBranch();
+        if (!orgInfo.branchId || cancelled) return;
+        const parents = await getParentsByBranch(orgInfo.branchId);
+        if (!cancelled) {
+          setBranchParents(parents);
+        }
+      } catch {
+        if (!cancelled) {
+          setBranchParents([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [authChecked]);
 
   const [studentAnalytics, setStudentAnalytics] = useState<StudentAnalytics[]>(
@@ -408,6 +505,37 @@ export default function App() {
       })
       .finally(() => setIsLoadingSections(false));
   }, [authChecked]);
+
+  const refreshMessageThreads = React.useCallback(async () => {
+    const rawThreads = await listChatThreads();
+    const messageEntries = await Promise.all(
+      rawThreads.map(async (thread) => [thread.id, await listThreadMessages(thread.id)] as const)
+    );
+    const messagesByThread = Object.fromEntries(messageEntries);
+    const nextThreads = rawThreads
+      .map((thread) =>
+        toThreadView(
+          thread,
+          messagesByThread[thread.id] ?? [],
+          students,
+          branchParents,
+        ),
+      )
+      .sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+      );
+
+    setMessageThreads(nextThreads);
+    return nextThreads;
+  }, [students, branchParents]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    refreshMessageThreads().catch(() => {
+      setMessageThreads([]);
+    });
+  }, [authChecked, refreshMessageThreads]);
 
   type AttendanceUiStatus = "present" | "absent" | "late" | "excused";
   type AttendanceUiEntry = {
@@ -559,72 +687,6 @@ export default function App() {
     activeSection?.sectionId,
     activeSection?.academicYearId,
   ]);
-
-  // Build message threads from real parent data when section students load
-  useEffect(() => {
-    if (!sectionStudents.length) return;
-    let cancelled = false;
-    (async () => {
-      // Resolve branch ID from teacher profile
-      const orgInfo = await ensureTeacherOrgBranch();
-      if (!orgInfo.branchId) return;
-      if (cancelled) return;
-
-      const parents = await getParentsByBranch(orgInfo.branchId);
-      if (cancelled || !parents.length) return;
-
-      // Build a map: studentId → parent (from student_details)
-      const parentByStudent = new Map<string, typeof parents[0]>();
-      const seenParentIds = new Set<string>();
-      for (const p of parents) {
-        if (seenParentIds.has(p.parentId)) continue;
-        seenParentIds.add(p.parentId);
-        for (const sid of p.studentIds) {
-          if (!parentByStudent.has(sid)) parentByStudent.set(sid, p);
-        }
-      }
-
-      setMessageThreads((prev) => {
-        const existingStudentIds = new Set(prev.map((t) => t.studentId));
-        const newThreads: Thread[] = [];
-
-        for (const student of sectionStudents) {
-          if (existingStudentIds.has(student.id)) continue;
-          const parent = parentByStudent.get(student.id);
-          if (!parent) continue;
-
-          const pInitials =
-            parent.parentName.split(" ").map((n) => n[0]).join("") || "P";
-          newThreads.push({
-            id: `THR-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            parentName: parent.parentName,
-            parentInitials: pInitials,
-            parentPhone: parent.parentPhone,
-            parentEmail: parent.parentEmail,
-            studentName: student.name,
-            studentId: student.id,
-            studentGrade: student.section ?? "",
-            avatarColor: (["blue", "teal", "purple", "amber", "green"] as const)[
-              Math.floor(Math.random() * 5)
-            ],
-            unread: false,
-            lastTime: "",
-            preview: "",
-            studentSnapshot: {
-              overallAvg: Math.round(student.performance ?? 0),
-              attendance: 95,
-              parentEngagement: 50,
-              recentHomework: [],
-            },
-            messages: [],
-          });
-        }
-
-        return newThreads.length ? [...prev, ...newThreads] : prev;
-      });
-    })();
-    return () => { cancelled = true; };
-  }, [sectionStudents]);
 
   const getWeekStart = (date: Date) => {
     const start = new Date(date);
@@ -1242,60 +1304,32 @@ export default function App() {
       if (!student) return;
 
       (async () => {
-        let parentName = student.parentName;
-        let parentPhone = student.parentPhone;
-        let parentEmail = student.parentEmail;
+        const parent = branchParents.find((item) =>
+          item.studentIds.includes(studentId),
+        );
+        const teacherId = getTeacherId();
+        if (!parent || !teacherId) return;
 
         try {
-          const orgInfo = await ensureTeacherOrgBranch();
-          if (orgInfo.branchId) {
-            const parents = await getParentsByBranch(orgInfo.branchId);
-            const match = parents.find((p) =>
-              p.studentIds.includes(studentId),
-            );
-            if (match) {
-              parentName = match.parentName || parentName;
-              parentPhone = match.parentPhone || parentPhone;
-              parentEmail = match.parentEmail || parentEmail;
-            }
-          }
+          const createdThread = await createChatThread({
+            parent: parent.parentId,
+            teacher: teacherId,
+            student: studentId,
+          });
+          await refreshMessageThreads();
+          setActiveMessageThreadId(createdThread.id);
+          setActiveTab("Messages");
         } catch {
-          // fallback to student data
+          const refreshedThreads = await refreshMessageThreads();
+          const resolvedThread = refreshedThreads.find(
+            (thread) =>
+              thread.studentId === studentId && thread.parentId === parent.parentId,
+          );
+          if (resolvedThread) {
+            setActiveMessageThreadId(resolvedThread.id);
+            setActiveTab("Messages");
+          }
         }
-
-        const pInitials =
-          parentName
-            .split(" ")
-            .map((n) => n[0])
-            .join("") || "P";
-        const newThreadId = `THR-${Date.now()}`;
-        const newThread: Thread = {
-          id: newThreadId,
-          parentName,
-          parentInitials: pInitials,
-          parentPhone,
-          parentEmail,
-          studentName: student.name,
-          studentId: student.id,
-          studentGrade: student.section ?? "Grade 7A",
-          avatarColor: ["blue", "teal", "purple", "amber", "green"][
-            Math.floor(Math.random() * 5)
-          ],
-          unread: false,
-          lastTime: "Just now",
-          preview: "New conversation started",
-          studentSnapshot: {
-            overallAvg: Math.round(student.performance ?? 0),
-            attendance: 95,
-            parentEngagement: 50,
-            recentHomework: [],
-          },
-          messages: [],
-        };
-
-        setMessageThreads((prev) => [newThread, ...prev]);
-        setActiveMessageThreadId(newThreadId);
-        setActiveTab("Messages");
       })();
     };
     window.addEventListener("send_student_sms", handleSendStudentSms);
@@ -1303,9 +1337,10 @@ export default function App() {
       window.removeEventListener("send_student_sms", handleSendStudentSms);
   }, [
     authChecked,
+    branchParents,
     students,
     messageThreads,
-    setMessageThreads,
+    refreshMessageThreads,
     setActiveMessageThreadId,
     setActiveTab,
   ]);
@@ -1704,7 +1739,7 @@ export default function App() {
                                   setMessageThreads((prev) =>
                                     prev.map((t) =>
                                       t.id === thread.id
-                                        ? { ...t, unread: false }
+                                        ? { ...t, unread: false, unreadCount: 0 }
                                         : t,
                                     ),
                                   );
@@ -2791,80 +2826,43 @@ export default function App() {
 
               <div className="p-5 border-t border-slate-50 bg-slate-50/30">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const student = students.find(
                       (s) => s.id === selectedStudentId,
                     );
                     if (student) {
                       const existingThread = messageThreads.find(
-                        (t) =>
-                          t.studentId === student.id ||
-                          t.studentName
-                            .toLowerCase()
-                            .includes(
-                              student.name.split(" ")[0].toLowerCase(),
-                            ) ||
-                          t.parentName
-                            .toLowerCase()
-                            .includes(
-                              student.parentName.split(" ")[0].toLowerCase(),
-                            ),
+                        (t) => t.studentId === student.id,
                       );
 
                       if (existingThread) {
                         setActiveMessageThreadId(existingThread.id);
                       } else {
-                        const pInitials =
-                          student.parentName
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("") || "P";
-                        const newThreadId = `THR-${Date.now()}`;
-                        const newThread: Thread = {
-                          id: newThreadId,
-                          parentName: student.parentName,
-                          parentInitials: pInitials,
-                          parentPhone:
-                            student.parentPhone ??
-                            "+251 9" +
-                              Math.floor(10000000 + Math.random() * 90000000),
-                          parentEmail:
-                            student.parentEmail ??
-                            `${student.parentName.toLowerCase().replace(/[^a-z]/g, "")}@mail.com`,
-                          studentName: student.name,
-                          studentId: student.id,
-                          studentGrade: student.section ?? "Grade 7A",
-                          avatarColor: [
-                            "blue",
-                            "teal",
-                            "purple",
-                            "amber",
-                            "green",
-                          ][Math.floor(Math.random() * 5)],
-                          unread: false,
-                          lastTime: "Just now",
-                          preview: "Draft message thread created...",
-                          studentSnapshot: {
-                            overallAvg: Math.round(student.performance ?? 0),
-                            attendance: 95,
-                            parentEngagement: 50,
-                            recentHomework: [],
-                          },
-                          messages: [
-                            {
-                              id: `M-${Date.now()}`,
-                              sender: "teacher" as const,
-                              text: `Hello, I wanted to reach out regarding ${student.name}'s attendance.`,
-                              time: new Date().toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }),
-                            },
-                          ],
-                        };
-
-                        setMessageThreads((prev) => [newThread, ...prev]);
-                        setActiveMessageThreadId(newThreadId);
+                        const parent = branchParents.find((item) =>
+                          item.studentIds.includes(student.id),
+                        );
+                        const teacherId = getTeacherId();
+                        if (parent && teacherId) {
+                          try {
+                            const createdThread = await createChatThread({
+                              parent: parent.parentId,
+                              teacher: teacherId,
+                              student: student.id,
+                            });
+                            await refreshMessageThreads();
+                            setActiveMessageThreadId(createdThread.id);
+                          } catch {
+                            const refreshedThreads = await refreshMessageThreads();
+                            const resolvedThread = refreshedThreads.find(
+                              (thread) =>
+                                thread.studentId === student.id &&
+                                thread.parentId === parent.parentId,
+                            );
+                            if (resolvedThread) {
+                              setActiveMessageThreadId(resolvedThread.id);
+                            }
+                          }
+                        }
                       }
                       setActiveTab("Messages");
                       setSelectedStudentId(null);
