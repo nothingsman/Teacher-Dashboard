@@ -925,8 +925,8 @@ export const OverviewScheduleWidget: React.FC<OverviewScheduleWidgetProps> = ({
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
       {/* Widget Header bar */}
-      <div className="p-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
-        <h3 className="text-xs font-black text-slate-700 tracking-wider uppercase flex items-center gap-2">
+      <div className="p-3 sm:p-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
+        <h3 className="text-[10px] sm:text-xs font-black text-slate-700 tracking-wider uppercase flex items-center gap-2">
           <Calendar size={14} className="text-[#1A237E] shrink-0" /> EGA Master Calendars
         </h3>
         <span className="text-[8px] font-black uppercase tracking-widest bg-slate-100/80 text-slate-500 border border-slate-150 px-2 py-0.5 rounded-sm">
@@ -934,7 +934,7 @@ export const OverviewScheduleWidget: React.FC<OverviewScheduleWidgetProps> = ({
         </span>
       </div>
 
-      <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5 flex-1">
+      <div className="p-3 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-5 flex-1">
         
         {/* Sub-Section 1: Class Timetable Grid item cell */}
         <div className="group border border-slate-100 bg-slate-50/30 hover:bg-slate-50 rounded-xl p-4 transition-all relative">

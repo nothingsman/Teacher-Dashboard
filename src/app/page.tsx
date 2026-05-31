@@ -76,6 +76,7 @@ import { checkHomeroomStatus } from "../services/homeroomService";
 import { fetchSchoolName } from "../services/schoolService";
 import { getParentsByBranch } from "../services/parentLinksService";
 import { ensureTeacherOrgBranch } from "../services/profileService";
+import { formatApiError } from "../services/errorUtils";
 import type {
   AttendanceListItem,
   Student,
@@ -105,7 +106,7 @@ const SidebarItem = ({
   <motion.button
     whileHover={{ x: 4 }}
     onClick={onClick}
-    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors duration-200 ${
+    className={`w-full flex items-center justify-between px-3 sm:px-4 min-h-[44px] py-2 sm:py-3 rounded-lg transition-colors duration-200 ${
       isActive
         ? "bg-[#1A237E] text-white shadow-lg shadow-blue-900/20"
         : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
@@ -159,6 +160,66 @@ const MetricCard = ({
     </div>
   </div>
 );
+
+// Custom select for sidebar that avoids iOS native picker clipping bug
+const SidebarSelect = ({
+  value,
+  onChange,
+  options,
+  icon,
+  className = "",
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  icon?: React.ReactNode;
+  className?: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 hover:border-[#1A237E]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1A237E]/5 uppercase tracking-tighter shadow-xs min-h-[32px]"
+      >
+        {icon && <span className="shrink-0">{icon}</span>}
+        <span className="flex-1 truncate text-left">{selected?.label ?? value}</span>
+        <ChevronDown size={10} className="text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-[200] max-h-48 overflow-y-auto">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-[10px] font-bold uppercase tracking-tight transition-colors ${
+                opt.value === value
+                  ? "bg-[#1A237E] text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface MessageRowProps {
   sender: string;
@@ -299,21 +360,7 @@ export default function App() {
   };
 
   const formatErrorMessage = (err: unknown, fallback: string) => {
-    if (!err) return fallback;
-    if (typeof err === "string") return err;
-    if (err instanceof Error) {
-      const anyErr = err as any;
-      if (typeof anyErr.status === "number") {
-        if (anyErr.status === 0)
-          return "Network error. Check your connection and try again.";
-        if (anyErr.status === 401)
-          return "Your session expired. Please sign in again.";
-        if (anyErr.status === 403)
-          return "You don't have permission to perform this action.";
-      }
-      return err.message || fallback;
-    }
-    return fallback;
+    return formatApiError(err, fallback).message;
   };
 
   useEffect(() => {
@@ -1317,12 +1364,12 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
       {/* A. Left Sidebar */}
       <aside
-        className={`w-64 bg-white border-r border-slate-100 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 transform lg:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`w-72 sm:w-64 bg-white border-r border-slate-100 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 transform lg:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Header Context */}
 
         {/* Classroom Context Header & Selectors */}
-        <div className="px-5 pt-7 pb-4 border-b border-slate-100 bg-linear-to-b from-white to-slate-50/30">
+        <div className="px-4 sm:px-5 pt-5 sm:pt-7 pb-4 border-b border-slate-100 bg-linear-to-b from-white to-slate-50/30">
           {/* Provider & Institution Branding */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -1358,81 +1405,41 @@ export default function App() {
           </div>
 
           {/* Context Dropdowns (Modern Grid) */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {/* Grade Selector */}
-              <div className="relative group">
-                <select
-                  value={globalGrade}
-                  onChange={(e) => setGlobalGrade(e.target.value)}
-                  className="w-full appearance-none pl-3 pr-7 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 hover:border-[#1A237E]/30 hover:bg-slate-50/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1A237E]/5 uppercase tracking-tighter shadow-xs"
-                >
-                  {gradeOptions.map((grade) => (
-                    <option key={grade} value={grade}>
-                      {grade}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={10}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors"
-                />
-              </div>
+              <SidebarSelect
+                value={globalGrade}
+                onChange={setGlobalGrade}
+                options={gradeOptions.map((g) => ({ value: g, label: g }))}
+              />
 
               {/* Section Selector */}
-              <div className="relative group">
-                <select
-                  value={globalSection}
-                  onChange={(e) => setGlobalSection(e.target.value)}
-                  className="w-full appearance-none pl-3 pr-7 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 hover:border-[#1A237E]/30 hover:bg-slate-50/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1A237E]/5 uppercase tracking-tighter shadow-xs"
-                >
-                  {sectionsForGrade.map((section) => (
-                    <option key={section.sectionId} value={section.sectionName}>
-                      {section.sectionName}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={10}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors"
-                />
-              </div>
+              <SidebarSelect
+                value={globalSection}
+                onChange={setGlobalSection}
+                options={sectionsForGrade.map((s) => ({ value: s.sectionName, label: s.sectionName }))}
+              />
             </div>
 
-            {/* Subject Selector (Full Width High Priority) */}
-            <div className="relative group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A237E] pointer-events-none z-10 opacity-70 group-hover:opacity-100 transition-opacity">
-                {selectedSubject.toLowerCase().includes("math") && (
-                  <Calculator size={13} strokeWidth={2.5} />
-                )}
-                {selectedSubject.toLowerCase().includes("physics") && (
-                  <Atom size={13} strokeWidth={2.5} />
-                )}
-                {selectedSubject.toLowerCase().includes("chem") && (
-                  <FlaskConical size={13} strokeWidth={2.5} />
-                )}
-                {!selectedSubject && <BookOpen size={13} strokeWidth={2.5} />}
-              </div>
-              <select
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                className="w-full appearance-none pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-[#1A237E] hover:border-[#1A237E]/40 hover:bg-[#1A237E]/5 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1A237E]/10 uppercase tracking-tight shadow-sm"
-              >
-                {subjectOptions.map((subject) => (
-                  <option key={subject.subjectId} value={subject.subjectName}>
-                    {subject.subjectName}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-hover:text-[#1A237E] transition-colors">
-                <ChevronDown size={12} />
-              </div>
-            </div>
+            {/* Subject Selector */}
+            <SidebarSelect
+              value={selectedSubject}
+              onChange={setSelectedSubject}
+              options={subjectOptions.map((s) => ({ value: s.subjectName, label: s.subjectName }))}
+              icon={
+                selectedSubject.toLowerCase().includes("math") ? <Calculator size={11} strokeWidth={2.5} className="text-[#1A237E]" /> :
+                selectedSubject.toLowerCase().includes("physics") ? <Atom size={11} strokeWidth={2.5} className="text-[#1A237E]" /> :
+                selectedSubject.toLowerCase().includes("chem") ? <FlaskConical size={11} strokeWidth={2.5} className="text-[#1A237E]" /> :
+                <BookOpen size={11} strokeWidth={2.5} className="text-[#1A237E]" />
+              }
+              className="w-full"
+            />
           </div>
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-3 sm:px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
           <SidebarItem
             icon={LayoutDashboard}
             label="Overview"
@@ -1551,7 +1558,7 @@ export default function App() {
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 lg:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
@@ -1596,26 +1603,28 @@ export default function App() {
           ))}
         </div>
         {/* Mobile Header */}
-        <header className="lg:hidden h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between sticky top-0 z-40">
+        <header className="lg:hidden h-14 sm:h-16 bg-white border-b border-slate-100 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-40">
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors"
+            aria-label="Open menu"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#1A237E] rounded-lg flex items-center justify-center text-white">
-              <GraduationCap size={18} />
+          <div className="flex items-center gap-2 min-w-0 flex-1 justify-center px-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#1A237E] rounded-lg flex items-center justify-center text-white shrink-0">
+              <GraduationCap size={16} />
             </div>
-            <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
-              Ethio-Global
+            <span className="text-[9px] sm:text-[10px] font-black text-slate-900 uppercase tracking-tight truncate">
+              {schoolName}
             </span>
           </div>
           <button
             onClick={() => setActiveTab("Notifications")}
-            className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors relative"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors relative shrink-0"
+            aria-label="Notifications"
           >
-            <Bell size={20} />
+            <Bell size={18} />
             {notificationCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                 {notificationCount}
@@ -1626,7 +1635,7 @@ export default function App() {
 
         {/* Dashboard Grid Container */}
         <div
-          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-4 md:p-8 gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
+          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
         >
           {activeTab === "Overview" && (
             <div className="w-full space-y-8">

@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Lock, CheckCircle2 } from "lucide-react";
-import { completeTeacherInvitation } from "../../../../services";
+import { completeTeacherInvitation, formatApiError } from "../../../../services";
+import { ErrorBanner } from "../../../../components/ErrorBanner";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -23,7 +24,7 @@ export default function CompleteTeacherInvitationPage() {
   const params = useParams<{ uid: string; token: string }>();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -36,26 +37,31 @@ export default function CompleteTeacherInvitationPage() {
     event.preventDefault();
     const message = validatePassword(password, confirm);
     if (message) {
-      setError(message);
-      return;
-    }
-
-    const uid = params?.uid;
-    const token = params?.token;
-    if (!uid || !token || Array.isArray(uid) || Array.isArray(token)) {
-      setError("Invalid invitation link.");
+      setError({ title: "Validation", message, severity: "warning" });
       return;
     }
 
     setLoading(true);
     setError(null);
 
+    const uid = params?.uid;
+    const token = params?.token;
+    if (!uid || !token || Array.isArray(uid) || Array.isArray(token)) {
+      setError({
+        title: "Invalid link",
+        message: "This activation link is invalid or has expired.",
+        severity: "warning",
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       await completeTeacherInvitation(uid, token, password);
       setSuccess(true);
       setTimeout(() => router.replace("/login"), 1600);
     } catch (err) {
-      setError((err as Error).message || "Failed to activate account.");
+      setError(formatApiError(err, "We couldn't activate your account. The link may have expired."));
     } finally {
       setLoading(false);
     }
@@ -84,8 +90,12 @@ export default function CompleteTeacherInvitationPage() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
+          <div className="mb-4">
+            <ErrorBanner
+              title={error.title}
+              message={error.message}
+              severity={error.severity}
+            />
           </div>
         )}
 

@@ -13,6 +13,8 @@ import {
 import type { TeacherQualification } from "../../services/profileService";
 import { getAccessToken } from "../../services/authStore";
 import { ArrowLeft, Save, User, GraduationCap, Pencil, X, Plus } from "lucide-react";
+import { formatApiError } from "../../services/errorUtils";
+import { ErrorBanner } from "../../components/ErrorBanner";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const EMPTY_QUAL: Omit<TeacherQualification, "id"> = {
@@ -31,19 +33,19 @@ function ProfileInner() {
   const [authChecked, setAuthChecked] = useState(false);
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
 
   // ── Profile section state ──────────────────────────────────────────────────
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<TeacherProfileUpdate>({});
   const [savingProfile, setSavingProfile] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
 
   // ── Qualifications section state ───────────────────────────────────────────
   const [editingQuals, setEditingQuals] = useState(false);
   const [pendingQuals, setPendingQuals] = useState<Omit<TeacherQualification, "id">[]>([]);
   const [savingQuals, setSavingQuals] = useState(false);
-  const [qualsError, setQualsError] = useState<string | null>(null);
+  const [qualsError, setQualsError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -71,7 +73,7 @@ function ProfileInner() {
           bio: data.bio,
         });
       })
-      .catch((err) => setError((err as Error).message || "Failed to load profile."))
+      .catch((err) => setError(formatApiError(err, "Failed to load profile.")))
       .finally(() => setLoading(false));
   }, [authChecked]);
 
@@ -88,7 +90,7 @@ function ProfileInner() {
       setProfile(refreshed);
       setEditingProfile(false);
     } catch (err) {
-      setProfileError((err as Error).message || "Failed to save.");
+      setProfileError(formatApiError(err, "Failed to save profile."));
     } finally {
       setSavingProfile(false);
     }
@@ -148,7 +150,7 @@ function ProfileInner() {
       setPendingQuals([]);
       setEditingQuals(false);
     } catch (err) {
-      setQualsError((err as Error).message || "Failed to save qualifications.");
+      setQualsError(formatApiError(err, "Failed to save qualifications."));
     } finally {
       setSavingQuals(false);
     }
@@ -174,9 +176,12 @@ function ProfileInner() {
         </button>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
-            <p className="text-sm text-rose-700">{error}</p>
-          </div>
+          <ErrorBanner
+            title={error.title}
+            message={error.message}
+            severity={error.severity}
+            onDismiss={() => setError(null)}
+          />
         )}
 
         {loading ? (
@@ -231,8 +236,13 @@ function ProfileInner() {
               </div>
 
               {profileError && (
-                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4">
-                  <p className="text-xs text-rose-700">{profileError}</p>
+                <div className="mb-4">
+                  <ErrorBanner
+                    title={profileError.title}
+                    message={profileError.message}
+                    severity={profileError.severity}
+                    onDismiss={() => setProfileError(null)}
+                  />
                 </div>
               )}
 
@@ -332,8 +342,13 @@ function ProfileInner() {
               </div>
 
               {qualsError && (
-                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4">
-                  <p className="text-xs text-rose-700">{qualsError}</p>
+                <div className="mb-4">
+                  <ErrorBanner
+                    title={qualsError.title}
+                    message={qualsError.message}
+                    severity={qualsError.severity}
+                    onDismiss={() => setQualsError(null)}
+                  />
                 </div>
               )}
 

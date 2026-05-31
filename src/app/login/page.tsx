@@ -5,19 +5,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { loginTeacher } from "../../services";
+import { loginTeacher, formatApiError } from "../../services";
 import { getAccessToken } from "../../services/authStore";
-
-function formatAuthError(message: string): string {
-  if (!message) return "Login failed. Please try again.";
-  if (message.includes("401")) return "Invalid email or password.";
-  return message;
-}
+import { ErrorBanner } from "../../components/ErrorBanner";
 
 export default function TeacherLoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
@@ -37,7 +32,11 @@ export default function TeacherLoginPage() {
     const password = String(formData.get("password") ?? "");
 
     if (!email || !password) {
-      setError("Email and password are required.");
+      setError({
+        title: "Missing fields",
+        message: "Please enter both your email and password.",
+        severity: "warning",
+      });
       setLoading(false);
       return;
     }
@@ -47,7 +46,7 @@ export default function TeacherLoginPage() {
 
       router.replace("/");
     } catch (err) {
-      setError(formatAuthError((err as Error).message));
+      setError(formatApiError(err));
     } finally {
       setLoading(false);
     }
@@ -102,8 +101,13 @@ export default function TeacherLoginPage() {
             </div>
 
             {error && (
-              <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-rose-700">{error}</p>
+              <div className="mb-6">
+                <ErrorBanner
+                  title={error.title}
+                  message={error.message}
+                  severity={error.severity}
+                  onDismiss={() => setError(null)}
+                />
               </div>
             )}
 

@@ -896,7 +896,7 @@ const GradebookModule: React.FC<GradebookModuleProps> = ({
             </p>
           </div>
         ) : (
-          <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-slate-100 rounded-xl overflow-x-auto shadow-sm">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">

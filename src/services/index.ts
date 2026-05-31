@@ -68,3 +68,4 @@ export * from "./assessmentResultsService";
 export * from "./parentLinksService";
 export * from "./homeroomService";
 export * from "./schoolService";
+export * from "./errorUtils";
