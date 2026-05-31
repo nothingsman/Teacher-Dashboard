@@ -54,7 +54,7 @@ export default function TeacherLoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-[#1A237E] to-[#283593] overflow-hidden">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200&h=1200&fit=crop&q=80"
@@ -63,16 +63,16 @@ export default function TeacherLoginPage() {
             priority
             quality={85}
             sizes="50vw"
-            className="object-cover opacity-40"
+            className="object-cover opacity-25"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/50 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#1A237E]/95 via-[#1A237E]/60 to-transparent" />
         </div>
         <div className="relative z-10 flex flex-col justify-end p-12 text-white">
           <h2 className="text-3xl font-bold mb-4">Welcome back, teacher</h2>
-          <p className="max-w-md text-base text-slate-300 md:text-lg">
+          <p className="max-w-md text-base text-blue-200 md:text-lg">
             Sign in to manage classes, track progress, and stay in sync with parents and students.
           </p>
-          <div className="mt-8 flex items-center gap-2 text-sm text-slate-400">
+          <div className="mt-8 flex items-center gap-2 text-sm text-blue-300">
             <span>Photo by</span>
             <a
               href="https://unsplash.com"
@@ -113,7 +113,7 @@ export default function TeacherLoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label htmlFor="email" className="text-sm font-medium text-slate-700">
+                <label htmlFor="email" className="text-sm font-semibold text-slate-700">
                   Email
                 </label>
                 <div className="relative">
@@ -125,13 +125,13 @@ export default function TeacherLoginPage() {
                     required
                     autoComplete="email"
                     placeholder="teacher@school.com"
-                    className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900/40 transition-all text-sm"
+                    className="w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1A237E] transition-all text-sm bg-slate-50 focus:bg-white"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="password" className="text-sm font-medium text-slate-700">
+                <label htmlFor="password" className="text-sm font-semibold text-slate-700">
                   Password
                 </label>
                 <div className="relative">
@@ -143,7 +143,7 @@ export default function TeacherLoginPage() {
                     required
                     autoComplete="current-password"
                     placeholder="Enter your password"
-                    className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900/40 transition-all text-sm"
+                    className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1A237E] transition-all text-sm bg-slate-50 focus:bg-white"
                   />
                   <button
                     type="button"
@@ -159,7 +159,7 @@ export default function TeacherLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#1A237E] text-white font-semibold hover:bg-blue-900 transition disabled:opacity-60"
               >
                 {loading ? "Signing in..." : "Sign in"}
                 <LogIn size={18} />
