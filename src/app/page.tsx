@@ -1421,7 +1421,7 @@ export default function App() {
 
   return (
     <HomeroomProvider isHomeroomTeacher={isHomeroomTeacher}>
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
+    <div className="h-screen overflow-hidden bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
       {/* A. Left Sidebar */}
       <aside
         className={`w-72 sm:w-64 bg-white border-r border-slate-100 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 transform lg:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
@@ -1624,7 +1624,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="lg:ml-64 flex-1 flex flex-col min-w-0">
+      <main className="lg:ml-64 flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Toasts */}
         <div className="fixed top-4 right-4 z-[80] space-y-2 w-[min(360px,calc(100vw-2rem))]">
           {toasts.map((t) => (
@@ -1695,7 +1695,7 @@ export default function App() {
 
         {/* Dashboard Grid Container */}
         <div
-          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
+          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 min-h-0 w-full max-w-full`}
         >
           {activeTab === "Overview" && (
             <div className="w-full space-y-8">

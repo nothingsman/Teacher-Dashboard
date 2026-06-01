@@ -464,9 +464,9 @@ const MessagesModule = ({
   return (
     <>
       <style>{`@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-    <div className="flex h-full w-full overflow-hidden bg-white">
-      <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
-        <div className="border-b border-slate-100 p-5">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-white">
+      <div className={`w-full md:w-[320px] shrink-0 min-h-0 border-r border-slate-100 flex-col ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
+        <div className="shrink-0 border-b border-slate-100 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold tracking-tight text-slate-900">Messages</h2>
             <span className="rounded-full bg-[#1A237E] px-3 py-1 text-[11px] font-bold text-white">
@@ -484,7 +484,7 @@ const MessagesModule = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+        <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-slate-100">
           {filteredThreads.map((thread) => (
             <button
               key={thread.id}
@@ -515,10 +515,10 @@ const MessagesModule = ({
         </div>
       </div>
 
-      <div className={`flex-1 flex-col ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
+      <div className={`min-h-0 flex-1 flex-col ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
         {activeThread ? (
           <>
-            <div className="flex items-center justify-between border-b border-slate-100 bg-white p-5">
+            <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-white p-5">
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   type="button"
@@ -545,7 +545,7 @@ const MessagesModule = ({
               </div>
             </div>
 
-            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto bg-slate-50/70 p-5">
+            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-5">
               {activeThread.messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="max-w-md text-center">
@@ -646,7 +646,7 @@ const MessagesModule = ({
               )}
             </div>
 
-            <div className="border-t border-slate-100 bg-white px-4 py-3">
+            <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-3">
               {selectedFile && (
                 <div className="mb-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">
