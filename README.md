@@ -2,7 +2,7 @@
   <img src="./public/logo.svg" alt="Ethio-Global Academy Teacher Portal" width="180" height="180">
   <br><br>
   <h1>Teacher Dashboard</h1>
-  <p><em>Kelem Academic Management Platform</em></p>
+  <p><em>Ethio-Global Academy — Academic Management Platform</em></p>
   <br>
   <p>
     <strong>Course:</strong> Software Engineering Final Year Project<br>
@@ -318,11 +318,13 @@ The messaging module establishes a WebSocket connection per active chat thread. 
 
 This project was developed as a Software Engineering final year project by the following team members:
 
-| [Tonetor777](https://github.com/Tonetor777) |
-| [oddegen](https://github.com/oddegen) |
-| [fitiha](https://github.com/fitiha) |
-| [NahomTesM](https://github.com/NahomTesM) |
-| [RobelD420](https://github.com/RobelD420) |
+| GitHub Profile | Role |
+|---|---|
+| [fitiha](https://github.com/fitiha) | Team Lead & Full-Stack Developer |
+| [NahomTesM](https://github.com/NahomTesM) | Frontend Developer |
+| [oddegen](https://github.com/oddegen) | Backend Integration & API Design |
+| [RobelD420](https://github.com/RobelD420) | UI/UX Design & Testing |
+| [Tonetor777](https://github.com/Tonetor777) | Documentation & Quality Assurance |
 
 ---
 
