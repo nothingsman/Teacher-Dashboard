@@ -3,7 +3,15 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { getTeacherProfile, type TeacherProfile } from "../../services";
+import {
+  getTeacherProfile,
+  restoreTeacherSession,
+  updateTeacherProfile,
+  addTeacherQualification,
+  type TeacherProfile,
+  type TeacherProfileUpdate,
+} from "../../services";
+import type { TeacherQualification } from "../../services/profileService";
 import { getAccessToken } from "../../services/authStore";
 import { ArrowLeft, User, GraduationCap } from "lucide-react";
 import { formatApiError } from "../../services/errorUtils";
@@ -18,9 +26,33 @@ function ProfileInner() {
   const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) { router.replace("/login"); return; }
-    setAuthChecked(true);
+    let cancelled = false;
+
+    const initAuth = async () => {
+      if (getAccessToken()) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+
+      const restored = await restoreTeacherSession();
+      if (cancelled) return;
+      if (!restored) {
+        router.replace("/login");
+        return;
+      }
+
+      setAuthChecked(true);
+    };
+
+    initAuth().catch(() => {
+      if (!cancelled) {
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {

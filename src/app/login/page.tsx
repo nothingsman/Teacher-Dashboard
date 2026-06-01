@@ -4,8 +4,8 @@ import Image from "next/image";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle, Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { loginTeacher, formatApiError } from "../../services";
+import { useRouter } from "next/navigation";
+import { loginTeacher, formatApiError, restoreTeacherSession } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LegalModal, TermsOfService, PrivacyPolicy } from "../../components/LegalModal";
@@ -21,10 +21,25 @@ function LoginInner() {
   const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
-    const existingToken = getAccessToken();
-    if (existingToken) {
-      router.replace("/");
-    }
+    let cancelled = false;
+
+    const initAuth = async () => {
+      if (getAccessToken()) {
+        router.replace("/");
+        return;
+      }
+
+      const restored = await restoreTeacherSession();
+      if (!cancelled && restored) {
+        router.replace("/");
+      }
+    };
+
+    initAuth().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
