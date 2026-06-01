@@ -121,13 +121,13 @@ const SidebarItem = ({
       <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
       <span className="text-sm font-medium tracking-tight">{label}</span>
     </div>
-    {count !== undefined && count > 0 && (
+    {count !== undefined && (
       <span
         className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
           isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
         }`}
       >
-        {count}
+        {count < 10 ? `0${count}` : count}
       </span>
     )}
   </motion.button>
@@ -310,19 +310,6 @@ const THREAD_AVATAR_COLORS: Thread["avatarColor"][] = [
   "green",
 ];
 
-const LIVE_REFRESH_MS = 2000;
-
-function normalizeChatMessages(messages: ChatMessage[]) {
-  const byId = new Map<string, ChatMessage>();
-  messages.forEach((message) => {
-    byId.set(message.id, message);
-  });
-  return [...byId.values()].sort(
-    (left, right) =>
-      new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
-  );
-}
-
 function buildThreadPreview(messages: ChatMessage[]) {
   const latest = messages[messages.length - 1];
   if (!latest) {
@@ -341,12 +328,11 @@ function toThreadView(
   students: Student[],
   parents: BranchParent[],
 ): Thread {
-  const normalizedMessages = normalizeChatMessages(messages);
   const student = students.find((item) => item.id === thread.student);
   const parent =
     parents.find((item) => item.parentId === thread.parent) ||
     parents.find((item) => item.studentIds.includes(thread.student));
-  const preview = buildThreadPreview(normalizedMessages);
+  const preview = buildThreadPreview(messages);
   const colorSeed = [...thread.id].reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
   return {
@@ -372,10 +358,10 @@ function toThreadView(
     lastTime: preview.lastTime || formatThreadTimestamp(thread.updated_at),
     preview: preview.preview,
     updatedAt: preview.updatedAt || thread.updated_at,
-    messages: normalizedMessages.map((message) => ({
+    messages: messages.map((message) => ({
       id: message.id,
       senderId: message.sender_id,
-      senderRole: message.sender === "parent" ? "parent" : "teacher",
+      senderRole: message.sender_id === parent?.userId ? "parent" : "teacher",
       text: message.text,
       createdAt: message.created_at,
       attachmentId: message.attachment,
@@ -621,18 +607,6 @@ export default function App() {
     refreshMessageThreads().catch(() => {
       setMessageThreads([]);
     });
-  }, [authChecked, refreshMessageThreads]);
-
-  useEffect(() => {
-    if (!authChecked) return;
-
-    const intervalId = window.setInterval(() => {
-      refreshMessageThreads().catch(() => undefined);
-    }, LIVE_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
   }, [authChecked, refreshMessageThreads]);
 
   type AttendanceUiStatus = "present" | "absent" | "late" | "excused";
@@ -1447,7 +1421,7 @@ export default function App() {
 
   return (
     <HomeroomProvider isHomeroomTeacher={isHomeroomTeacher}>
-    <div className="h-screen overflow-hidden bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
+    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
       {/* A. Left Sidebar */}
       <aside
         className={`w-72 sm:w-64 bg-white border-r border-slate-100 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 transform lg:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
@@ -1650,7 +1624,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="lg:ml-64 flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden">
+      <main className="lg:ml-64 flex-1 flex flex-col min-w-0">
         {/* Toasts */}
         <div className="fixed top-4 right-4 z-[80] space-y-2 w-[min(360px,calc(100vw-2rem))]">
           {toasts.map((t) => (
@@ -1721,7 +1695,7 @@ export default function App() {
 
         {/* Dashboard Grid Container */}
         <div
-          className={`${activeTab === "Messages" ? "p-0 gap-0 h-full min-h-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
+          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
         >
           {activeTab === "Overview" && (
             <div className="w-full space-y-8">

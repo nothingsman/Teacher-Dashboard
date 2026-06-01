@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronDown,
   ChevronLeft,
+  Loader2,
   Paperclip,
   Search,
   Send,
@@ -13,13 +14,14 @@ import {
   X,
 } from "lucide-react";
 import {
+  buildChatWebsocketUrl,
   formatThreadTimestamp,
   getMediaFile,
-  listThreadMessages,
   markThreadRead,
   sendChatMessage,
   uploadChatAttachment,
 } from "../services/messagesService";
+import { ensureAccessToken } from "../services/apiClient";
 import { getUserProfile } from "../services/userProfileStore";
 import type { ChatMessage, MediaFile, Thread, ThreadMessage } from "../services/messagesService";
 
@@ -34,7 +36,7 @@ function toThreadMessage(message: ChatMessage, currentUserId: string | null): Th
   return {
     id: message.id,
     senderId: message.sender_id,
-    senderRole: message.sender === "teacher" ? "teacher" : "parent",
+    senderRole: message.sender_id === currentUserId ? "teacher" : "parent",
     text: message.text,
     createdAt: message.created_at,
     attachmentId: message.attachment,
@@ -65,32 +67,9 @@ function mergeThreadMessages(
   existing: ThreadMessage[],
   incoming: ThreadMessage[],
 ): ThreadMessage[] {
-  const persistedIncoming = incoming.filter((message) => !message.id.startsWith("pending_"));
-  const normalizedExisting = existing.filter((message) => {
-    if (!message.id.startsWith("pending_")) return true;
-
-    return !persistedIncoming.some((incomingMessage) => {
-      const senderMismatch =
-        Boolean(message.senderId)
-        && Boolean(incomingMessage.senderId)
-        && incomingMessage.senderId !== message.senderId;
-      if (senderMismatch) {
-        return false;
-      }
-
-      const sameText = (incomingMessage.text ?? "").trim() === (message.text ?? "").trim();
-      const sameAttachment = incomingMessage.attachmentId === message.attachmentId;
-      const createdDelta = Math.abs(
-        new Date(incomingMessage.createdAt).getTime() - new Date(message.createdAt).getTime(),
-      );
-
-      return sameText && sameAttachment && createdDelta < 30000;
-    });
-  });
-
   const byId = new Map<string, ThreadMessage>();
 
-  for (const message of normalizedExisting) {
+  for (const message of existing) {
     byId.set(message.id, message);
   }
 
@@ -98,23 +77,10 @@ function mergeThreadMessages(
     byId.set(message.id, message);
   }
 
-  const sortedMessages = [...byId.values()].sort(
+  return [...byId.values()].sort(
     (left, right) =>
       new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
   );
-
-  return sortedMessages.filter((message, index, list) => {
-    if (index === 0) return true;
-    const previous = list[index - 1];
-    const sameSender = previous.senderRole === message.senderRole;
-    const sameText = (previous.text ?? "").trim() === (message.text ?? "").trim();
-    const sameAttachment = previous.attachmentId === message.attachmentId;
-    const createdDelta = Math.abs(
-      new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime(),
-    );
-
-    return !(sameSender && sameText && sameAttachment && createdDelta < 2000);
-  });
 }
 
 const MessagesModule = ({
@@ -124,11 +90,14 @@ const MessagesModule = ({
   onThreadsUpdate,
 }: MessagesModuleProps) => {
   const currentUserId = getUserProfile()?.id ?? null;
+  const reconnectTimerRef = useRef<number | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const threadsRef = useRef<Thread[]>(threads);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdsRef = useRef<Set<string>>(new Set());
+  const tempIdCounterRef = useRef(0);
   const pendingStatusRef = useRef<Map<string, 'sending' | 'sent'>>(new Map());
   const pendingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const activeThreadIdRef = useRef<string | null>(null);
@@ -140,6 +109,9 @@ const MessagesModule = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
+  const [socketState, setSocketState] = useState<
+    "idle" | "connecting" | "connected" | "reconnecting" | "disconnected"
+  >("idle");
   const [attachmentMeta, setAttachmentMeta] = useState<Record<string, MediaFile>>({});
 
   const activeThreadId = externalThreadId || internalThreadId || threads[0]?.id || null;
@@ -156,40 +128,6 @@ const MessagesModule = ({
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) || null,
     [threads, activeThreadId],
-  );
-  const unreadTotal = useMemo(
-    () => threads.reduce((sum, thread) => sum + thread.unreadCount, 0),
-    [threads],
-  );
-
-  const syncThreadFromServer = useCallback(
-    async (threadId: string, options?: { unreadCount?: number; unread?: boolean }) => {
-      const fetchedMessages = await listThreadMessages(threadId);
-      const normalizedMessages = mergeThreadMessages(
-        [],
-        fetchedMessages.map((message) => toThreadMessage(message, currentUserId)),
-      );
-      const latest = fetchedMessages[fetchedMessages.length - 1];
-
-      const nextThreads = threadsRef.current
-        .map((thread) => {
-          if (thread.id !== threadId) return thread;
-          return {
-            ...thread,
-            messages: normalizedMessages,
-            preview: latest?.text?.trim() || (latest?.attachment ? "Attachment shared" : thread.preview),
-            lastTime: latest ? formatThreadTimestamp(latest.created_at) : thread.lastTime,
-            updatedAt: latest?.created_at || thread.updatedAt,
-            unreadCount: options?.unreadCount ?? thread.unreadCount,
-            unread: options?.unread ?? thread.unread,
-          };
-        })
-        .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
-
-      threadsRef.current = nextThreads;
-      onThreadsUpdate(nextThreads);
-    },
-    [currentUserId, onThreadsUpdate],
   );
 
   useEffect(() => {
@@ -251,6 +189,132 @@ const MessagesModule = ({
   }, [threads, attachmentMeta]);
 
   useEffect(() => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    if (!activeThreadId) {
+      setSocketState("idle");
+      return;
+    }
+
+    let disposed = false;
+    let reconnectAttempts = 0;
+    let shouldForceRefresh = false;
+
+    const connect = async () => {
+      if (disposed) return;
+      setSocketState(reconnectAttempts === 0 ? "connecting" : "reconnecting");
+      const token = await ensureAccessToken(shouldForceRefresh);
+      shouldForceRefresh = false;
+      if (disposed) return;
+      if (!token) {
+        setSocketState("disconnected");
+        return;
+      }
+
+      const socket = new WebSocket(buildChatWebsocketUrl(activeThreadId, token));
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        reconnectAttempts = 0;
+        setSocketState("connected");
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as
+            | { event: "message.created"; thread_id: string; message: ChatMessage }
+            | { event: "message.read"; thread_id: string; reader_id: string; count: number };
+
+          if (payload.event === "message.created") {
+            const nextMessage = toThreadMessage(payload.message, currentUserId);
+            if (pendingMessageIdsRef.current.has(nextMessage.id)) {
+              pendingMessageIdsRef.current.delete(nextMessage.id);
+              return;
+            }
+            onThreadsUpdate(
+              threadsRef.current
+                .map((thread) => {
+                  if (thread.id !== payload.thread_id) return thread;
+                  return {
+                    ...thread,
+                    messages: mergeThreadMessages(thread.messages, [nextMessage]),
+                    preview: payload.message.text?.trim() || (payload.message.attachment ? "Attachment shared" : thread.preview),
+                    lastTime: formatThreadTimestamp(payload.message.created_at),
+                    updatedAt: payload.message.created_at,
+                    unread: payload.message.sender_id === currentUserId ? false : thread.id !== activeThreadId,
+                    unreadCount:
+                      payload.message.sender_id === currentUserId || thread.id === activeThreadId
+                        ? thread.unreadCount
+                        : thread.unreadCount + 1,
+                  };
+                })
+                .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
+            );
+          }
+
+          if (payload.event === "message.read") {
+            onThreadsUpdate(
+              threadsRef.current.map((thread) => {
+                if (thread.id !== payload.thread_id) return thread;
+                return {
+                  ...thread,
+                  messages: thread.messages.map((message) => {
+                    if (message.senderId !== currentUserId) return message;
+                    if (message.readByIds.includes(payload.reader_id)) return message;
+                    return {
+                      ...message,
+                      readByIds: [...message.readByIds, payload.reader_id],
+                    };
+                  }),
+                };
+              }),
+            );
+          }
+        } catch {
+          // Ignore malformed websocket payloads.
+        }
+      };
+
+      socket.onerror = () => {
+        socket.close();
+      };
+
+      socket.onclose = (event) => {
+        if (disposed) return;
+        setSocketState("disconnected");
+        shouldForceRefresh = event.code === 4403;
+        reconnectAttempts += 1;
+        const delay = Math.min(1000 * 2 ** (reconnectAttempts - 1), 10000);
+        reconnectTimerRef.current = window.setTimeout(connect, delay);
+      };
+    };
+
+    connect().catch(() => {
+      if (!disposed) {
+        setSocketState("disconnected");
+      }
+    });
+
+    return () => {
+      disposed = true;
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
+  }, [activeThreadId, currentUserId, onThreadsUpdate, threads]);
+
+  useEffect(() => {
     return () => {
       pendingClearTimersRef.current.forEach((timer) => clearTimeout(timer));
       pendingClearTimersRef.current.clear();
@@ -305,6 +369,37 @@ const MessagesModule = ({
       return;
     }
 
+    const tempId = `pending_${Date.now()}_${tempIdCounterRef.current++}`;
+    const optimistic: ThreadMessage = {
+      id: tempId,
+      senderId: currentUserId ?? "",
+      senderRole: "teacher",
+      text: trimmedText,
+      createdAt: new Date().toISOString(),
+      attachmentId: attachmentId ?? null,
+      readByIds: [],
+    };
+
+    pendingStatusRef.current.set(tempId, "sending");
+
+    const optimisticThreads = threadsRef.current
+      .map((thread) =>
+        thread.id === activeThread.id
+          ? {
+              ...thread,
+              messages: mergeThreadMessages(thread.messages, [optimistic]),
+              preview: trimmedText || (selectedFile ? "Attachment" : thread.preview),
+              lastTime: formatThreadTimestamp(optimistic.createdAt),
+              updatedAt: optimistic.createdAt,
+              unread: false,
+            }
+          : thread,
+      )
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+
+    threadsRef.current = optimisticThreads;
+    onThreadsUpdate(optimisticThreads);
+
     setComposerText("");
     setSelectedFile(null);
     if (fileInputRef.current) {
@@ -316,12 +411,25 @@ const MessagesModule = ({
       attachment: attachmentId,
     })
       .then((created) => {
+        const realMsg = toThreadMessage(created, currentUserId);
         pendingMessageIdsRef.current.add(created.id);
+
+        const updated = threadsRef.current.map((thread) => {
+          if (thread.id !== activeThread.id) return thread;
+          const messagesWithoutTemp = thread.messages.filter((m) => m.id !== tempId);
+          return {
+            ...thread,
+            messages: mergeThreadMessages(messagesWithoutTemp, [realMsg]),
+            preview: created.text?.trim() || (created.attachment ? "Attachment shared" : thread.preview),
+            lastTime: formatThreadTimestamp(created.created_at),
+            updatedAt: created.created_at,
+          };
+        });
+
+        pendingStatusRef.current.delete(tempId);
         pendingStatusRef.current.set(created.id, "sent");
-        syncThreadFromServer(activeThread.id, {
-          unreadCount: 0,
-          unread: false,
-        }).catch(() => undefined);
+        threadsRef.current = updated;
+        onThreadsUpdate(updated);
 
         const clearTimer = setTimeout(() => {
           pendingStatusRef.current.delete(created.id);
@@ -339,6 +447,16 @@ const MessagesModule = ({
         }
       })
       .catch((error) => {
+        pendingStatusRef.current.delete(tempId);
+        const reverted = threadsRef.current.map((thread) => {
+          if (thread.id !== activeThread.id) return thread;
+          return {
+            ...thread,
+            messages: thread.messages.filter((m) => m.id !== tempId),
+          };
+        });
+        threadsRef.current = reverted;
+        onThreadsUpdate(reverted);
         setSendError(error instanceof Error ? error.message : "Failed to send message.");
       });
   };
@@ -346,13 +464,13 @@ const MessagesModule = ({
   return (
     <>
       <style>{`@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-white">
-      <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col min-h-0 ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
+    <div className="flex h-full w-full overflow-hidden bg-white">
+      <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
         <div className="border-b border-slate-100 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold tracking-tight text-slate-900">Messages</h2>
             <span className="rounded-full bg-[#1A237E] px-3 py-1 text-[11px] font-bold text-white">
-              {unreadTotal}
+              {threads.length}
             </span>
           </div>
           <div className="relative">
@@ -366,7 +484,7 @@ const MessagesModule = ({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
           {filteredThreads.map((thread) => (
             <button
               key={thread.id}
@@ -397,7 +515,7 @@ const MessagesModule = ({
         </div>
       </div>
 
-      <div className={`flex-1 min-h-0 flex-col ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
+      <div className={`flex-1 flex-col ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
         {activeThread ? (
           <>
             <div className="flex items-center justify-between border-b border-slate-100 bg-white p-5">
@@ -422,12 +540,12 @@ const MessagesModule = ({
                 </div>
               </div>
               <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
-                {activeThreadId ? <Wifi size={14} /> : <WifiOff size={14} />}
-                <span>{activeThreadId ? "Syncing" : "Offline"}</span>
+                {socketState === "connected" ? <Wifi size={14} /> : <WifiOff size={14} />}
+                <span>{socketState === "connected" ? "Live" : socketState === "connecting" || socketState === "reconnecting" ? "Connecting" : "Offline"}</span>
               </div>
             </div>
 
-            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative flex-1 min-h-0 overflow-y-auto bg-slate-50/70 p-5">
+            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto bg-slate-50/70 p-5">
               {activeThread.messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="max-w-md text-center">
@@ -443,7 +561,7 @@ const MessagesModule = ({
               ) : (
                 <div className="space-y-1">
                   {activeThread.messages.map((message, index) => {
-                    const isOwn = message.senderRole === "teacher";
+                    const isOwn = message.senderId === currentUserId;
                     const attachment = message.attachmentId ? attachmentMeta[message.attachmentId] : null;
                     const seen = isOwn && message.readByIds.some((readerId) => readerId !== currentUserId);
                     const prev = index > 0 ? activeThread.messages[index - 1] : null;
@@ -491,12 +609,18 @@ const MessagesModule = ({
                                 </a>
                               )}
                             </div>
-                            <div className={`mt-2 flex items-center gap-2 px-1 text-[10px] ${isOwn ? "justify-end" : "justify-start"} text-slate-400`}>
+                            <div className={`mt-2 flex items-center gap-1 px-1 text-[10px] ${isOwn ? "justify-end" : "justify-start"} text-slate-400`}>
                               <span className="font-medium">{formatThreadTimestamp(message.createdAt)}</span>
                               {(() => {
                                 const status = pendingStatusRef.current.get(message.id);
-                                if (isOwn) {
-                                  return <span>{seen ? "Seen" : "Sent"}</span>;
+                                if (status === "sending") {
+                                  return <Loader2 size={10} className="animate-spin" strokeWidth={2.5} />;
+                                }
+                                if (status === "sent") {
+                                  return <span>Sent</span>;
+                                }
+                                if (seen) {
+                                  return <span>Seen</span>;
                                 }
                                 return null;
                               })()}
