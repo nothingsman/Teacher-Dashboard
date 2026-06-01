@@ -39,6 +39,7 @@ import {
   Pencil,
   LogOut,
   MessageSquareWarning,
+  Settings,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import StudentsModule from "../components/StudentsModule";
@@ -88,6 +89,7 @@ import type {
   StudentAnalytics,
   TeacherSection,
 } from "../services";
+import SettingsModal from "../components/SettingsModal";
 import ScheduleModule, {
   OverviewScheduleWidget,
 } from "../components/ScheduleModule";
@@ -395,6 +397,7 @@ export default function App() {
   const [messageThreads, setMessageThreads] = useState<Thread[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
   const [schoolName, setSchoolName] = useState<string | null>(null);
   const [branchName, setBranchName] = useState<string | null>(null);
@@ -1666,11 +1669,11 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  router.push("/profile?edit=true");
+                  setIsSettingsOpen(true);
                 }}
                 className="w-full px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
               >
-                <Pencil size={14} /> Edit Profile
+                <Settings size={14} /> Settings
               </button>
               <button
                 type="button"
@@ -2982,6 +2985,11 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      <SettingsModal
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

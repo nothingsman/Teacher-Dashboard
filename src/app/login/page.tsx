@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle, Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,7 +9,7 @@ import { loginTeacher, formatApiError } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
 
-export default function TeacherLoginPage() {
+function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reset = searchParams.get("reset") === "true";
@@ -195,5 +195,13 @@ export default function TeacherLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TeacherLoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-500">Loading…</div>}>
+      <LoginInner />
+    </Suspense>
   );
 }
