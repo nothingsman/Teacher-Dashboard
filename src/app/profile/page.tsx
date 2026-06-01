@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import {
   getTeacherProfile,
+  restoreTeacherSession,
   updateTeacherProfile,
   addTeacherQualification,
   type TeacherProfile,
@@ -49,9 +50,33 @@ function ProfileInner() {
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) { router.replace("/login"); return; }
-    setAuthChecked(true);
+    let cancelled = false;
+
+    const initAuth = async () => {
+      if (getAccessToken()) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+
+      const restored = await restoreTeacherSession();
+      if (cancelled) return;
+      if (!restored) {
+        router.replace("/login");
+        return;
+      }
+
+      setAuthChecked(true);
+    };
+
+    initAuth().catch(() => {
+      if (!cancelled) {
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {

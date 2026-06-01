@@ -4,12 +4,14 @@ import { request } from "./apiClient";
 import {
   clearTokens,
   decodeJwtPayload,
+  getAccessToken,
   getTeacherId,
   setTeacherId,
   setTeacherRole,
   setTokens,
 } from "./authStore";
 import { setUserProfile, clearUserProfile } from "./userProfileStore";
+import { ensureAccessToken } from "./apiClient";
 
 export type JwtLoginResponse = {
   access: string;
@@ -50,6 +52,59 @@ function extractTeacherId(payload: Record<string, unknown> | null) {
   return value ?? null;
 }
 
+async function hydrateTeacherSession(
+  fallbackEmail?: string,
+): Promise<{ teacherId: string; role: string | null }> {
+  const user = await request<AuthUserResponse>("GET", "/api/users/me/");
+  const role = user.role ?? null;
+  if (!isTeacherRole(role)) {
+    clearTokens();
+    clearUserProfile();
+    throw new Error("This account is not a teacher. Please contact your administrator.");
+  }
+
+  if (role) {
+    setTeacherRole(role);
+  }
+
+  setUserProfile({
+    id: user.id,
+    name: user.name || "",
+    email: user.email || "",
+    role: role || "",
+  });
+
+  let teacherId = getTeacherId() || user.id;
+
+  try {
+    const searchValue = user.name || user.email || fallbackEmail || user.id;
+    const teacherLookup = await request<{ results?: Array<{ id: string; user_email?: string; user?: string }> } | Array<{ id: string; user_email?: string; user?: string }>>(
+      "GET",
+      `/api/teachers/?search=${encodeURIComponent(searchValue)}`
+    );
+
+    const teacherResults = Array.isArray(teacherLookup)
+      ? teacherLookup
+      : teacherLookup.results || [];
+
+    const matchedTeacher =
+      teacherResults.find((item) =>
+        item.user_email?.toLowerCase() === (user.email || fallbackEmail || "").toLowerCase()
+      ) ||
+      teacherResults.find((item) => item.user === user.id) ||
+      teacherResults[0];
+
+    if (matchedTeacher?.id) {
+      teacherId = matchedTeacher.id;
+    }
+  } catch {
+    // Fall back to the stored or user id if the teacher lookup fails.
+  }
+
+  setTeacherId(teacherId);
+  return { teacherId, role };
+}
+
 export async function loginTeacher(email: string, password: string) {
   const data = await request<JwtLoginResponse>(
     "POST",
@@ -66,77 +121,25 @@ export async function loginTeacher(email: string, password: string) {
   }
 
   setTokens(data.access, data.refresh);
-
-  const user = await request<AuthUserResponse>("GET", "/api/users/me/");
-  const role = user.role ?? null;
-  if (!isTeacherRole(role)) {
-    clearTokens();
-    throw new Error("This account is not a teacher. Please contact your administrator.");
-  }
-
-  if (role) {
-    setTeacherRole(role);
-  }
-
-  // Store the user profile for later use
-  console.log('💾 Storing user profile:', { id: user.id, name: user.name, email: user.email, role });
-  setUserProfile({
-    id: user.id,
-    name: user.name || '',
-    email: user.email || '',
-    role: role || '',
-  });
-
-  // Try to find the teacher record by searching for one with this user
-  let teacherId = user.id;
-  
-  try {
-    // Try to search for a teacher by email or name
-    const searchValue = user.name || user.email || email;
-    console.log(`🔍 Searching for teacher with: ${searchValue}`);
-    
-    const teacherLookup = await request<{ results?: Array<{ id: string; user_email?: string; user?: string }> } | Array<{ id: string; user_email?: string; user?: string }>>(
-      "GET",
-      `/api/teachers/?search=${encodeURIComponent(searchValue)}`
-    );
-
-    const teacherResults = Array.isArray(teacherLookup)
-      ? teacherLookup
-      : teacherLookup.results || [];
-
-    console.log(`📋 Found ${teacherResults.length} teacher(s)`, teacherResults);
-
-    // Try to match by user_email first
-    let matchedTeacher = teacherResults.find((item) =>
-      item.user_email?.toLowerCase() === (user.email || email).toLowerCase()
-    );
-
-    // If no match by email, try to match by user ID
-    if (!matchedTeacher) {
-      matchedTeacher = teacherResults.find((item) =>
-        item.user === user.id
-      );
-    }
-
-    // If still no match, use the first result
-    if (!matchedTeacher && teacherResults.length > 0) {
-      matchedTeacher = teacherResults[0];
-    }
-
-    if (matchedTeacher?.id) {
-      teacherId = matchedTeacher.id;
-      console.log(`✅ Found teacher record: ${teacherId}`);
-    } else {
-      console.warn(`⚠️ No teacher record found, using user ID as fallback: ${user.id}`);
-    }
-  } catch (searchError) {
-    console.warn(`⚠️ Teacher search failed, using user ID as fallback:`, searchError);
-    // Continue with user.id as fallback
-  }
-
-  setTeacherId(teacherId);
+  const { teacherId, role } = await hydrateTeacherSession(email);
 
   return { ...data, teacherId, role };
+}
+
+export async function restoreTeacherSession(): Promise<boolean> {
+  const token = await ensureAccessToken();
+  if (!token && !getAccessToken()) {
+    return false;
+  }
+
+  try {
+    await hydrateTeacherSession();
+    return true;
+  } catch {
+    clearTokens();
+    clearUserProfile();
+    return false;
+  }
 }
 
 export async function completeTeacherInvitation(

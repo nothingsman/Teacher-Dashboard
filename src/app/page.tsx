@@ -75,6 +75,7 @@ import {
 } from "../services/attendanceService";
 import { getAssessmentsForContext } from "../services/assessmentsService";
 import { getAccessToken, getTeacherId } from "../services/authStore";
+import { restoreTeacherSession } from "../services/authService";
 import { HomeroomProvider } from "../contexts/HomeroomContext";
 import { checkHomeroomStatus } from "../services/homeroomService";
 import { fetchSchoolName } from "../services/schoolService";
@@ -397,6 +398,10 @@ export default function App() {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
   const [schoolName, setSchoolName] = useState("EduGov");
+  const unreadMessageCount = messageThreads.reduce(
+    (sum, thread) => sum + thread.unreadCount,
+    0,
+  );
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -436,12 +441,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-    setAuthChecked(true);
+    let cancelled = false;
+
+    const initAuth = async () => {
+      if (getAccessToken()) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+
+      const restored = await restoreTeacherSession();
+      if (cancelled) return;
+      if (!restored) {
+        router.replace("/login");
+        return;
+      }
+      setAuthChecked(true);
+    };
+
+    initAuth().catch(() => {
+      if (!cancelled) {
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -1523,7 +1548,7 @@ export default function App() {
             icon={MessageSquare}
             label="Messages"
             isActive={activeTab === "Messages"}
-            count={messageThreads.filter((t) => t.unread).length || undefined}
+            count={unreadMessageCount || undefined}
             onClick={() => setActiveTab("Messages")}
           />
           <SidebarItem
@@ -1731,9 +1756,9 @@ export default function App() {
                         </button>
                       </div>
                       <div className="px-6 py-2">
-                        {messageThreads.filter((t) => t.unread).length > 0 ? (
+                        {messageThreads.filter((t) => t.unreadCount > 0).length > 0 ? (
                           messageThreads
-                            .filter((t) => t.unread)
+                            .filter((t) => t.unreadCount > 0)
                             .slice(0, 4)
                             .map((thread) => (
                               <MessageRow

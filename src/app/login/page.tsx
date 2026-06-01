@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { loginTeacher, formatApiError } from "../../services";
+import { loginTeacher, formatApiError, restoreTeacherSession } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
 
@@ -16,10 +16,25 @@ export default function TeacherLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    const existingToken = getAccessToken();
-    if (existingToken) {
-      router.replace("/");
-    }
+    let cancelled = false;
+
+    const initAuth = async () => {
+      if (getAccessToken()) {
+        router.replace("/");
+        return;
+      }
+
+      const restored = await restoreTeacherSession();
+      if (!cancelled && restored) {
+        router.replace("/");
+      }
+    };
+
+    initAuth().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {

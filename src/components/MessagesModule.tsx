@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
-  CheckCheck,
   ChevronDown,
   ChevronLeft,
   Loader2,
@@ -65,6 +63,26 @@ function isSameDay(a: string, b: string): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
+function mergeThreadMessages(
+  existing: ThreadMessage[],
+  incoming: ThreadMessage[],
+): ThreadMessage[] {
+  const byId = new Map<string, ThreadMessage>();
+
+  for (const message of existing) {
+    byId.set(message.id, message);
+  }
+
+  for (const message of incoming) {
+    byId.set(message.id, message);
+  }
+
+  return [...byId.values()].sort(
+    (left, right) =>
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+}
+
 const MessagesModule = ({
   externalThreadId,
   onThreadChange,
@@ -82,6 +100,7 @@ const MessagesModule = ({
   const tempIdCounterRef = useRef(0);
   const pendingStatusRef = useRef<Map<string, 'sending' | 'sent'>>(new Map());
   const pendingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const activeThreadIdRef = useRef<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
 
   const [internalThreadId, setInternalThreadId] = useState<string | null>(null);
@@ -224,7 +243,7 @@ const MessagesModule = ({
                   if (thread.id !== payload.thread_id) return thread;
                   return {
                     ...thread,
-                    messages: [...thread.messages, nextMessage],
+                    messages: mergeThreadMessages(thread.messages, [nextMessage]),
                     preview: payload.message.text?.trim() || (payload.message.attachment ? "Attachment shared" : thread.preview),
                     lastTime: formatThreadTimestamp(payload.message.created_at),
                     updatedAt: payload.message.created_at,
@@ -314,10 +333,17 @@ const MessagesModule = ({
   }, []);
 
   useEffect(() => {
+    if (activeThreadIdRef.current !== activeThreadId) {
+      activeThreadIdRef.current = activeThreadId;
+      setShowScrollDown(false);
+      scrollToBottom(false);
+      return;
+    }
+
     if (!showScrollDown) {
       scrollToBottom(false);
     }
-  }, [activeThread?.messages.length, showScrollDown, scrollToBottom]);
+  }, [activeThreadId, activeThread?.messages.length, showScrollDown, scrollToBottom]);
 
   const handleThreadSelect = (id: string) => {
     setInternalThreadId(id);
@@ -361,7 +387,7 @@ const MessagesModule = ({
         thread.id === activeThread.id
           ? {
               ...thread,
-              messages: [...thread.messages, optimistic],
+              messages: mergeThreadMessages(thread.messages, [optimistic]),
               preview: trimmedText || (selectedFile ? "Attachment" : thread.preview),
               lastTime: formatThreadTimestamp(optimistic.createdAt),
               updatedAt: optimistic.createdAt,
@@ -390,9 +416,10 @@ const MessagesModule = ({
 
         const updated = threadsRef.current.map((thread) => {
           if (thread.id !== activeThread.id) return thread;
+          const messagesWithoutTemp = thread.messages.filter((m) => m.id !== tempId);
           return {
             ...thread,
-            messages: thread.messages.map((m) => (m.id === tempId ? realMsg : m)),
+            messages: mergeThreadMessages(messagesWithoutTemp, [realMsg]),
             preview: created.text?.trim() || (created.attachment ? "Attachment shared" : thread.preview),
             lastTime: formatThreadTimestamp(created.created_at),
             updatedAt: created.created_at,
@@ -582,7 +609,7 @@ const MessagesModule = ({
                                 </a>
                               )}
                             </div>
-                            <div className={`mt-0.5 flex items-center gap-1 px-1 text-[10px] ${isOwn ? "justify-end" : "justify-start"} text-slate-400`}>
+                            <div className={`mt-2 flex items-center gap-1 px-1 text-[10px] ${isOwn ? "justify-end" : "justify-start"} text-slate-400`}>
                               <span className="font-medium">{formatThreadTimestamp(message.createdAt)}</span>
                               {(() => {
                                 const status = pendingStatusRef.current.get(message.id);
@@ -590,10 +617,10 @@ const MessagesModule = ({
                                   return <Loader2 size={10} className="animate-spin" strokeWidth={2.5} />;
                                 }
                                 if (status === "sent") {
-                                  return <Check size={10} strokeWidth={3} className="text-slate-400" />;
+                                  return <span>Sent</span>;
                                 }
                                 if (seen) {
-                                  return <CheckCheck size={12} className="text-[#1A237E]" strokeWidth={2.5} />;
+                                  return <span>Seen</span>;
                                 }
                                 return null;
                               })()}
