@@ -14,26 +14,26 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Ethio-Global Academy — Teacher Dashboard",
-    template: "%s — Ethio-Global Academy",
+    default: "Kelem — Teacher Dashboard",
+    template: "%s — Kelem",
   },
   description:
-    "Academic portal for teachers to manage classes, track student performance, communicate with parents, and oversee attendance at Ethio-Global Academy.",
+    "Academic portal for teachers to manage classes, track student performance, communicate with parents, and oversee attendance at Kelem.",
   icons: {
     icon: "/icon.svg",
   },
   openGraph: {
-    title: "Ethio-Global Academy — Teacher Dashboard",
+    title: "Kelem — Teacher Dashboard",
     description:
       "Academic portal for teachers to manage classes, track student performance, communicate with parents, and oversee attendance.",
-    url: "https://ethioglobalacademy.com",
-    siteName: "Ethio-Global Academy",
+    url: "https://kelem.edu",
+    siteName: "Kelem",
     locale: "en_US",
     type: "website",
   },
-  applicationName: "Ethio-Global Academy",
+  applicationName: "Kelem",
   appleWebApp: {
-    title: "EGA Teacher",
+    title: "Kelem Teacher",
     capable: true,
     statusBarStyle: "black-translucent",
   },

@@ -1,19 +1,24 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, type FormEvent } from "react";
-import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { CheckCircle, Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { loginTeacher, formatApiError, restoreTeacherSession } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { LegalModal, TermsOfService, PrivacyPolicy } from "../../components/LegalModal";
 
-export default function TeacherLoginPage() {
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reset = searchParams.get("reset") === "true";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +120,17 @@ export default function TeacherLoginPage() {
               </p>
             </div>
 
+            {reset && (
+              <div className="mb-6">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-start gap-3 shadow-sm">
+                  <CheckCircle size={18} className="text-emerald-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-emerald-800 flex-1">
+                    Your password has been reset! You can now login with your new password.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="mb-6">
                 <ErrorBanner
@@ -171,6 +187,15 @@ export default function TeacherLoginPage() {
                 </div>
               </div>
 
+              <div className="flex justify-end">
+                <a
+                  href="/forgot-password"
+                  className="text-sm font-medium text-[#1A237E] hover:text-blue-800 transition-colors"
+                >
+                  Forgot password?
+                </a>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -181,12 +206,44 @@ export default function TeacherLoginPage() {
               </button>
             </form>
 
-            <p className="text-xs text-slate-500 mt-6">
-              Need access? Contact your school administrator for an invite.
+            <p className="mt-6 text-center text-xs text-slate-500">
+              By clicking continue, you agree to our{" "}
+              <button
+                type="button"
+                onClick={() => setShowTerms(true)}
+                className="underline hover:text-slate-700 font-medium"
+              >
+                Terms of Service
+              </button>{" "}
+              and{" "}
+              <button
+                type="button"
+                onClick={() => setShowPrivacy(true)}
+                className="underline hover:text-slate-700 font-medium"
+              >
+                Privacy Policy
+              </button>
+              .
             </p>
           </motion.div>
         </div>
       </div>
+
+      <LegalModal isOpen={showTerms} onClose={() => setShowTerms(false)} title="Terms of Service">
+        <TermsOfService />
+      </LegalModal>
+
+      <LegalModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="Privacy Policy">
+        <PrivacyPolicy />
+      </LegalModal>
     </div>
+  );
+}
+
+export default function TeacherLoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-500">Loading…</div>}>
+      <LoginInner />
+    </Suspense>
   );
 }

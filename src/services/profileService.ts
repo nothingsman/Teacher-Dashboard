@@ -83,7 +83,7 @@ const HARDCODED_PROFILE: TeacherProfile = {
   grade: "Grade 7",
   section: "Sec A",
   email: "sara.kassa@school.com",
-  employeeId: "EGA-7A-01",
+  employeeId: "KEL-7A-01",
   bio: "Focused on building strong learning habits and parent engagement.",
   specialization: "Primary Education",
   joiningDate: "2024-01-15",
@@ -121,8 +121,8 @@ function mapTeacherProfile(api: TeacherProfileApi): TeacherProfile {
     specialization: api.specialization,
     joiningDate: api.joining_date,
     user: api.user,
-    organization: api.organization,
-    branch: api.branch,
+    organization: extractId(api.organization) ?? api.organization,
+    branch: extractId(api.branch) ?? api.branch,
     qualifications:
       api.qualifications?.map((qualification) => ({
         id: qualification.id,
@@ -133,6 +133,17 @@ function mapTeacherProfile(api: TeacherProfileApi): TeacherProfile {
         certificateCopy: qualification.certificate_copy,
       })) ?? [],
   };
+}
+
+/** Extract a string UUID from a value that may be a plain string or a nested { id } object. */
+function extractId(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null && "id" in value) {
+    const id = (value as Record<string, unknown>).id;
+    if (typeof id === "string") return id;
+  }
+  return undefined;
 }
 
 export async function ensureTeacherOrgBranch(): Promise<TeacherOrgBranchInfo> {
@@ -164,13 +175,15 @@ export async function ensureTeacherOrgBranch(): Promise<TeacherOrgBranchInfo> {
       `/api/teachers/${teacherId}/`,
     );
 
-    if (data.organization && !cachedOrg)
-      setTeacherOrganization(data.organization);
-    if (data.branch && !cachedBranch) setTeacherBranch(data.branch);
+    const orgId = extractId(data.organization) ?? cachedOrg ?? undefined;
+    const branchId = extractId(data.branch) ?? cachedBranch ?? undefined;
+
+    if (orgId && !cachedOrg) setTeacherOrganization(orgId);
+    if (branchId && !cachedBranch) setTeacherBranch(branchId);
 
     return {
-      organizationId: data.organization ?? cachedOrg ?? undefined,
-      branchId: data.branch ?? cachedBranch ?? undefined,
+      organizationId: orgId,
+      branchId,
     };
   } catch (error) {
     console.error("❌ Failed to resolve teacher organization/branch:", error);
@@ -255,8 +268,10 @@ export async function getTeacherProfile(): Promise<TeacherProfile> {
     }
 
     // Cache organization and branch for downstream requests
-    if (data.organization) setTeacherOrganization(data.organization);
-    if (data.branch) setTeacherBranch(data.branch);
+    const orgId = extractId(data.organization);
+    const branchId = extractId(data.branch);
+    if (orgId) setTeacherOrganization(orgId);
+    if (branchId) setTeacherBranch(branchId);
 
     return mapped;
   } catch (error) {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -39,6 +39,7 @@ import {
   Pencil,
   LogOut,
   MessageSquareWarning,
+  Settings,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import StudentsModule from "../components/StudentsModule";
@@ -78,7 +79,7 @@ import { getAccessToken, getTeacherId } from "../services/authStore";
 import { restoreTeacherSession } from "../services/authService";
 import { HomeroomProvider } from "../contexts/HomeroomContext";
 import { checkHomeroomStatus } from "../services/homeroomService";
-import { fetchSchoolName } from "../services/schoolService";
+import { fetchSchoolInfo } from "../services/schoolService";
 import { getParentsByBranch } from "../services/parentLinksService";
 import { ensureTeacherOrgBranch } from "../services/profileService";
 import { formatApiError } from "../services/errorUtils";
@@ -89,6 +90,8 @@ import type {
   StudentAnalytics,
   TeacherSection,
 } from "../services";
+import SettingsModal from "../components/SettingsModal";
+import ProfileModal from "../components/ProfileModal";
 import ScheduleModule, {
   OverviewScheduleWidget,
 } from "../components/ScheduleModule";
@@ -406,12 +409,28 @@ export default function App() {
   const [messageThreads, setMessageThreads] = useState<Thread[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
-  const [schoolName, setSchoolName] = useState("EduGov");
   const unreadMessageCount = messageThreads.reduce(
     (sum, thread) => sum + thread.unreadCount,
     0,
   );
+  const [schoolName, setSchoolName] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSchoolInfo()
+      .then((info) => {
+        if (info) {
+          setSchoolName(info.schoolName);
+          setBranchName(info.branchName);
+          setLogoUrl(info.logoUrl);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -427,7 +446,6 @@ export default function App() {
   const isAttendanceReadOnly = !isHomeroomTeacher;
   const cantEdit = isAttendanceReadOnly || selectedDateISO !== todayISO;
 
-  // Force Day view when attendance is read-only (non-homeroom teacher)
   useEffect(() => {
     if (isAttendanceReadOnly && attendanceView !== "Day") {
       setAttendanceView("Day");
@@ -491,26 +509,6 @@ export default function App() {
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [isProfileMenuOpen]);
 
-  // Student and Attendance State
-  const [students, setStudents] = useState<Student[]>([]);
-  const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
-  const [taskCount, setTaskCount] = useState<number>(0);
-  const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
-
-  useEffect(() => {
-    if (!authChecked) return;
-    getStudents()
-      .then(setStudents)
-      .catch(() => {});
-  }, [authChecked]);
-
-  useEffect(() => {
-    fetchSchoolName().then((name) => {
-      if (name) setSchoolName(name);
-    });
-  }, []);
-
-
   const [notifications, setNotifications] = useState<
     import("../services").Notification[]
   >([]);
@@ -556,6 +554,18 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, [authChecked]);
+
+  const [students, setStudents] = useState<Student[]>([]);
+  const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
+  const [taskCount, setTaskCount] = useState<number>(0);
+  const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    getStudents()
+      .then(setStudents)
+      .catch(() => {});
   }, [authChecked]);
 
   const [studentAnalytics, setStudentAnalytics] = useState<StudentAnalytics[]>(
@@ -819,10 +829,14 @@ export default function App() {
     }
     let cancelled = false;
     (async () => {
-      console.log("[HomeroomCheck] calling checkHomeroomStatus", { sectionId, academicYearId });
-      const result = await checkHomeroomStatus(sectionId, academicYearId);
-      console.log("[HomeroomCheck] result", result);
-      if (!cancelled) setIsHomeroomTeacher(result);
+      try {
+        console.log("[HomeroomCheck] calling checkHomeroomStatus", { sectionId, academicYearId });
+        const result = await checkHomeroomStatus(sectionId, academicYearId);
+        console.log("[HomeroomCheck] result", result);
+        if (!cancelled) setIsHomeroomTeacher(result);
+      } catch {
+        console.error("[HomeroomCheck] error checking homeroom status");
+      }
     })();
     return () => {
       cancelled = true;
@@ -1051,7 +1065,11 @@ export default function App() {
   }, [selectedSubject, subjectOptions]);
 
   const handleMarkAllNotificationsRead = async () => {
-    setNotifications(await markAllNotificationsRead());
+    try {
+      setNotifications(await markAllNotificationsRead());
+    } catch {
+      console.error("Failed to mark notifications as read");
+    }
   };
 
   const handleLogout = () => {
@@ -1514,26 +1532,39 @@ export default function App() {
                   fill="currentColor"
                 />
                 <span className="text-[9px] font-black text-[#1A237E] uppercase tracking-[0.2em] leading-none">
-                  Kelem-Co Platform
+                  Kelem Platform
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-linear-to-br from-[#1A237E] to-[#3949AB] rounded-xl flex items-center justify-center shadow-md shadow-blue-900/15 shrink-0 ring-1 ring-white/20">
-                <Hexagon
-                  className="text-white fill-white/10"
-                  size={18}
-                  strokeWidth={2.5}
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={schoolName || "School logo"}
+                  className="w-10 h-10 rounded-xl object-contain bg-white border border-slate-100 shrink-0"
                 />
-              </div>
+              ) : (
+                <div className="w-10 h-10 bg-linear-to-br from-[#1A237E] to-[#3949AB] rounded-xl flex items-center justify-center shadow-md shadow-blue-900/15 shrink-0 ring-1 ring-white/20">
+                  <Hexagon
+                    className="text-white fill-white/10"
+                    size={18}
+                    strokeWidth={2.5}
+                  />
+                </div>
+              )}
               <div className="flex flex-col min-w-0">
                 <h2 className="text-[12px] font-black uppercase tracking-tight text-slate-800 truncate leading-tight">
-                  {schoolName}
+                  {schoolName || "School"}
                 </h2>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                   Academic Portal
                 </p>
+                {branchName && (
+                  <p className="text-[9px] font-semibold text-slate-500 truncate">
+                    {branchName}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1661,7 +1692,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  router.push("/profile");
+                  setIsProfileOpen(true);
                 }}
                 className="w-full px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
               >
@@ -1671,11 +1702,11 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  router.push("/profile?edit=true");
+                  setIsSettingsOpen(true);
                 }}
                 className="w-full px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
               >
-                <Pencil size={14} /> Edit Profile
+                <Settings size={14} /> Settings
               </button>
               <button
                 type="button"
@@ -1750,7 +1781,7 @@ export default function App() {
               <GraduationCap size={16} />
             </div>
             <span className="text-[9px] sm:text-[10px] font-black text-slate-900 uppercase tracking-tight truncate">
-              {schoolName}
+              {schoolName || "School"}
             </span>
           </div>
           <button
@@ -1924,6 +1955,8 @@ export default function App() {
               onThreadChange={setActiveMessageThreadId}
               threads={messageThreads}
               onThreadsUpdate={setMessageThreads}
+              availableParents={availableParents}
+              onInitiateChat={handleInitiateChat}
             />
           )}
           {activeTab === "Gradebook" && (
@@ -2789,7 +2822,7 @@ export default function App() {
                             {student.name}
                           </h3>
                           <p className="text-[9px] font-black text-slate-400 tracking-[0.1em] uppercase mt-0.5">
-                            EGA ID: {student.id}
+                            Kelem ID: {student.id}
                           </p>
                         </div>
                       </>
@@ -2985,6 +3018,21 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      <ProfileModal
+        open={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        profile={teacherProfile}
+        onProfileUpdated={(updated) => {
+          setTeacherProfile(updated);
+          setIsProfileOpen(false);
+        }}
+      />
+
+      <SettingsModal
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
