@@ -4,38 +4,50 @@ import { request } from "./apiClient";
 import { getTeacherBranch } from "./authStore";
 import { ensureTeacherOrgBranch } from "./profileService";
 
-const IS_MOCK = !process.env.NEXT_PUBLIC_API_BASE_URL;
+/** Matches the actual response from /api/branches/{id}/school-name/ */
+interface BranchSchoolNameResponse {
+  branch_id: string;
+  branch_name: string;
+  school_id: string;
+  school_name: string;
+}
 
-export interface BranchSchool {
+/** Matches the actual response from /api/branches/{id}/ */
+interface BranchDetailResponse {
   id: string;
   organization: string;
   school: string;
   name: string;
-  address?: string;
-  city?: string;
-  region?: string;
-  contact_phone?: string;
-  contact_email?: string;
-  status: string;
 }
 
 export async function fetchSchoolName(): Promise<string | null> {
-  if (IS_MOCK) {
-    return "EduGov School";
-  }
-
-  // Ensure branch ID is resolved from the teacher profile first
   const orgInfo = await ensureTeacherOrgBranch();
   const branchId = orgInfo.branchId || getTeacherBranch();
-  if (!branchId) return "EduGov School";
+  if (!branchId) return null;
 
   try {
-    const data = await request<BranchSchool>(
+    const data = await request<BranchSchoolNameResponse>(
       "GET",
       `/api/branches/${branchId}/school-name/`,
     );
-    return data.name || "EduGov School";
+    return data.school_name || null;
   } catch {
-    return "EduGov School";
+    return null;
+  }
+}
+
+export async function fetchBranchName(): Promise<string | null> {
+  const orgInfo = await ensureTeacherOrgBranch();
+  const branchId = orgInfo.branchId || getTeacherBranch();
+  if (!branchId) return null;
+
+  try {
+    const data = await request<BranchDetailResponse>(
+      "GET",
+      `/api/branches/${branchId}/`,
+    );
+    return data.name || null;
+  } catch {
+    return null;
   }
 }

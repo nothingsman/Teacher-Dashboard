@@ -77,7 +77,7 @@ import { getAssessmentsForContext } from "../services/assessmentsService";
 import { getAccessToken, getTeacherId } from "../services/authStore";
 import { HomeroomProvider } from "../contexts/HomeroomContext";
 import { checkHomeroomStatus } from "../services/homeroomService";
-import { fetchSchoolName } from "../services/schoolService";
+import { fetchSchoolName, fetchBranchName } from "../services/schoolService";
 import { getParentsByBranch } from "../services/parentLinksService";
 import { ensureTeacherOrgBranch } from "../services/profileService";
 import { formatApiError } from "../services/errorUtils";
@@ -396,7 +396,8 @@ export default function App() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
-  const [schoolName, setSchoolName] = useState("EduGov");
+  const [schoolName, setSchoolName] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState<string | null>(null);
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -473,6 +474,14 @@ export default function App() {
     fetchSchoolName()
       .then((name) => {
         if (name) setSchoolName(name);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchBranchName()
+      .then((name) => {
+        if (name) setBranchName(name);
       })
       .catch(() => {});
   }, []);
@@ -1495,7 +1504,7 @@ export default function App() {
                   fill="currentColor"
                 />
                 <span className="text-[9px] font-black text-[#1A237E] uppercase tracking-[0.2em] leading-none">
-                  Kelem-Co Platform
+                  Kelem Platform
                 </span>
               </div>
             </div>
@@ -1510,11 +1519,16 @@ export default function App() {
               </div>
               <div className="flex flex-col min-w-0">
                 <h2 className="text-[12px] font-black uppercase tracking-tight text-slate-800 truncate leading-tight">
-                  {schoolName}
+                  {schoolName || "School"}
                 </h2>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                   Academic Portal
                 </p>
+                {branchName && (
+                  <p className="text-[9px] font-semibold text-slate-500 truncate">
+                    {branchName}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1731,7 +1745,7 @@ export default function App() {
               <GraduationCap size={16} />
             </div>
             <span className="text-[9px] sm:text-[10px] font-black text-slate-900 uppercase tracking-tight truncate">
-              {schoolName}
+              {schoolName || "School"}
             </span>
           </div>
           <button
