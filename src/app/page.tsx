@@ -52,7 +52,7 @@ import {
   PerformanceDistribution,
   ParentEngagementChart,
 } from "../components/AnalyticsCharts";
-import type { BranchParent, ChatMessage, ChatThread, Thread } from "../services";
+import type { BranchParent, ChatMessage, ChatThread, Thread, ThreadMessage } from "../services";
 import {
   createChatThread,
   formatThreadTimestamp,
@@ -322,6 +322,18 @@ function buildThreadPreview(messages: ChatMessage[]) {
   };
 }
 
+function buildThreadMessages(messages: ChatMessage[], parentUserId?: string): ThreadMessage[] {
+  return messages.map((message) => ({
+    id: message.id,
+    senderId: message.sender_id,
+    senderRole: message.sender_id === parentUserId ? "parent" : "teacher",
+    text: message.text,
+    createdAt: message.created_at,
+    attachmentId: message.attachment,
+    readByIds: message.read_by_ids,
+  }));
+}
+
 function toThreadView(
   thread: ChatThread,
   messages: ChatMessage[],
@@ -332,7 +344,12 @@ function toThreadView(
   const parent =
     parents.find((item) => item.parentId === thread.parent) ||
     parents.find((item) => item.studentIds.includes(thread.student));
-  const preview = buildThreadPreview(messages);
+  const fallbackMessages = messages.length
+    ? messages
+    : thread.latest_message
+      ? [thread.latest_message]
+      : [];
+  const preview = buildThreadPreview(fallbackMessages);
   const colorSeed = [...thread.id].reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
   return {
@@ -358,15 +375,7 @@ function toThreadView(
     lastTime: preview.lastTime || formatThreadTimestamp(thread.updated_at),
     preview: preview.preview,
     updatedAt: preview.updatedAt || thread.updated_at,
-    messages: messages.map((message) => ({
-      id: message.id,
-      senderId: message.sender_id,
-      senderRole: message.sender_id === parent?.userId ? "parent" : "teacher",
-      text: message.text,
-      createdAt: message.created_at,
-      attachmentId: message.attachment,
-      readByIds: message.read_by_ids,
-    })),
+    messages: buildThreadMessages(messages, parent?.userId),
   };
 }
 
@@ -393,6 +402,7 @@ export default function App() {
   const [activeMessageThreadId, setActiveMessageThreadId] = useState<
     string | null
   >(null);
+  const [rawMessageThreads, setRawMessageThreads] = useState<ChatThread[]>([]);
   const [messageThreads, setMessageThreads] = useState<Thread[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -578,36 +588,91 @@ export default function App() {
       .finally(() => setIsLoadingSections(false));
   }, [authChecked]);
 
-  const refreshMessageThreads = React.useCallback(async () => {
-    const rawThreads = await listChatThreads();
-    const messageEntries = await Promise.all(
-      rawThreads.map(async (thread) => [thread.id, await listThreadMessages(thread.id)] as const)
-    );
-    const messagesByThread = Object.fromEntries(messageEntries);
-    const nextThreads = rawThreads
-      .map((thread) =>
-        toThreadView(
-          thread,
-          messagesByThread[thread.id] ?? [],
-          students,
-          branchParents,
-        ),
-      )
-      .sort(
-        (left, right) =>
-          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-      );
+  const mergeMessageThreadMetadata = React.useCallback(
+    (rawThreads: ChatThread[], currentThreads: Thread[]) =>
+      rawThreads
+        .map((thread) => {
+          const existing = currentThreads.find((item) => item.id === thread.id);
+          const canReuseMessages = existing && existing.updatedAt === thread.updated_at;
+          const threadMessages = canReuseMessages
+            ? existing.messages.map((message) => ({
+                id: message.id,
+                thread: thread.id,
+                sender: message.senderId,
+                sender_id: message.senderId,
+                text: message.text,
+                attachment: message.attachmentId,
+                read_by_ids: message.readByIds,
+                created_at: message.createdAt,
+                updated_at: message.createdAt,
+              }))
+            : [];
 
-    setMessageThreads(nextThreads);
-    return nextThreads;
-  }, [students, branchParents]);
+          return toThreadView(
+            thread,
+            threadMessages,
+            students,
+            branchParents,
+          );
+        })
+        .sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+        ),
+    [branchParents, students],
+  );
+
+  const refreshMessageThreadMetadata = React.useCallback(async () => {
+    const rawThreads = await listChatThreads();
+    setRawMessageThreads(rawThreads);
+    setMessageThreads((current) => mergeMessageThreadMetadata(rawThreads, current));
+    return rawThreads;
+  }, [mergeMessageThreadMetadata]);
+
+  const hydrateMessageThread = React.useCallback(async (threadId: string) => {
+    const messages = await listThreadMessages(threadId);
+    setMessageThreads((current) => {
+      const rawThread = rawMessageThreads.find((thread) => thread.id === threadId) ?? null;
+
+      if (!rawThread) return current;
+
+      const hydrated = toThreadView(rawThread, messages, students, branchParents);
+      return current
+        .map((thread) => (thread.id === threadId ? hydrated : thread))
+        .sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+        );
+    });
+  }, [branchParents, rawMessageThreads, students]);
 
   useEffect(() => {
     if (!authChecked) return;
-    refreshMessageThreads().catch(() => {
+    refreshMessageThreadMetadata().catch(() => {
       setMessageThreads([]);
+      setRawMessageThreads([]);
     });
-  }, [authChecked, refreshMessageThreads]);
+  }, [authChecked, refreshMessageThreadMetadata]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+
+    const intervalId = window.setInterval(() => {
+      refreshMessageThreadMetadata().catch(() => undefined);
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [authChecked, refreshMessageThreadMetadata]);
+
+  const visibleMessageThreadId =
+    activeMessageThreadId || messageThreads[0]?.id || null;
+
+  useEffect(() => {
+    if (!authChecked || activeTab !== "Messages" || !visibleMessageThreadId) return;
+    hydrateMessageThread(visibleMessageThreadId).catch(() => undefined);
+  }, [activeTab, authChecked, hydrateMessageThread, visibleMessageThreadId]);
 
   type AttendanceUiStatus = "present" | "absent" | "late" | "excused";
   type AttendanceUiEntry = {
@@ -1388,14 +1453,14 @@ export default function App() {
             teacher: teacherId,
             student: studentId,
           });
-          await refreshMessageThreads();
+          await refreshMessageThreadMetadata();
           setActiveMessageThreadId(createdThread.id);
           setActiveTab("Messages");
         } catch {
-          const refreshedThreads = await refreshMessageThreads();
+          const refreshedThreads = await refreshMessageThreadMetadata();
           const resolvedThread = refreshedThreads.find(
             (thread) =>
-              thread.studentId === studentId && thread.parentId === parent.parentId,
+              thread.student === studentId && thread.parent === parent.parentId,
           );
           if (resolvedThread) {
             setActiveMessageThreadId(resolvedThread.id);
@@ -1412,7 +1477,7 @@ export default function App() {
     branchParents,
     students,
     messageThreads,
-    refreshMessageThreads,
+    refreshMessageThreadMetadata,
     setActiveMessageThreadId,
     setActiveTab,
   ]);
@@ -2883,14 +2948,14 @@ export default function App() {
                               teacher: teacherId,
                               student: student.id,
                             });
-                            await refreshMessageThreads();
+                            await refreshMessageThreadMetadata();
                             setActiveMessageThreadId(createdThread.id);
                           } catch {
-                            const refreshedThreads = await refreshMessageThreads();
+                            const refreshedThreads = await refreshMessageThreadMetadata();
                             const resolvedThread = refreshedThreads.find(
                               (thread) =>
-                                thread.studentId === student.id &&
-                                thread.parentId === parent.parentId,
+                                thread.student === student.id &&
+                                thread.parent === parent.parentId,
                             );
                             if (resolvedThread) {
                               setActiveMessageThreadId(resolvedThread.id);

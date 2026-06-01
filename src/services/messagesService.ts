@@ -9,6 +9,7 @@ export interface ChatThread {
   branch: string;
   unread_count: number;
   last_read_at: string | null;
+  latest_message?: ChatMessage | null;
   created_at: string;
   updated_at: string;
 }
