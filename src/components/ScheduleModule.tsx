@@ -259,7 +259,7 @@ export const SchedulePDFModal: React.FC<SchedulePDFModalProps> = ({
               <h3 className="text-sm font-black uppercase tracking-wider text-white">
                 {activeMode === 'weekly' ? 'Weekly_Timetable_Master.pdf' : 'Yearly_Academic_Calendar.pdf'}
               </h3>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">EGA Publishing Hub · Official Records Office</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Kelem Publishing Hub · Official Records Office</p>
             </div>
           </div>
 
@@ -927,7 +927,7 @@ export const OverviewScheduleWidget: React.FC<OverviewScheduleWidgetProps> = ({
       {/* Widget Header bar */}
       <div className="p-3 sm:p-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
         <h3 className="text-[10px] sm:text-xs font-black text-slate-700 tracking-wider uppercase flex items-center gap-2">
-          <Calendar size={14} className="text-[#1A237E] shrink-0" /> EGA Master Calendars
+          <Calendar size={14} className="text-[#1A237E] shrink-0" /> Kelem Master Calendars
         </h3>
         <span className="text-[8px] font-black uppercase tracking-widest bg-slate-100/80 text-slate-500 border border-slate-150 px-2 py-0.5 rounded-sm">
           A.Y. 2026/27

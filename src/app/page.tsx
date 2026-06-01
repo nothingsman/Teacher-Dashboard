@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -470,9 +470,11 @@ export default function App() {
   }, [authChecked]);
 
   useEffect(() => {
-    fetchSchoolName().then((name) => {
-      if (name) setSchoolName(name);
-    });
+    fetchSchoolName()
+      .then((name) => {
+        if (name) setSchoolName(name);
+      })
+      .catch(() => {});
   }, []);
 
 
@@ -554,28 +556,98 @@ export default function App() {
   }, [authChecked]);
 
   const refreshMessageThreads = React.useCallback(async () => {
-    const rawThreads = await listChatThreads();
-    const messageEntries = await Promise.all(
-      rawThreads.map(async (thread) => [thread.id, await listThreadMessages(thread.id)] as const)
-    );
-    const messagesByThread = Object.fromEntries(messageEntries);
-    const nextThreads = rawThreads
-      .map((thread) =>
-        toThreadView(
-          thread,
-          messagesByThread[thread.id] ?? [],
-          students,
-          branchParents,
-        ),
-      )
-      .sort(
-        (left, right) =>
-          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    try {
+      const rawThreads = await listChatThreads();
+      const messageEntries = await Promise.all(
+        rawThreads.map(async (thread) => [thread.id, await listThreadMessages(thread.id)] as const)
       );
+      const messagesByThread = Object.fromEntries(messageEntries);
+      const nextThreads = rawThreads
+        .map((thread) =>
+          toThreadView(
+            thread,
+            messagesByThread[thread.id] ?? [],
+            students,
+            branchParents,
+          ),
+        )
+        .filter((thread) => sectionStudents.length === 0 || sectionStudents.some((s) => s.id === thread.studentId))
+        .sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+        );
 
-    setMessageThreads(nextThreads);
-    return nextThreads;
-  }, [students, branchParents]);
+      setMessageThreads(nextThreads);
+      return nextThreads;
+    } catch {
+      console.error("Failed to refresh message threads");
+      return [];
+    }
+  }, [students, branchParents, sectionStudents]);
+
+  const availableParents = useMemo(() => {
+    const threadedStudentIds = new Set(messageThreads.map((t) => t.studentId));
+    return branchParents
+      .filter((parent) => {
+        const relevantStudents = parent.studentIds.filter(
+          (sid) =>
+            sectionStudents.length === 0 ||
+            sectionStudents.some((s) => s.id === sid),
+        );
+        return relevantStudents.some((sid) => !threadedStudentIds.has(sid));
+      })
+      .map((parent) => {
+        const student = students.find(
+          (s) =>
+            parent.studentIds.includes(s.id) && !threadedStudentIds.has(s.id),
+        );
+        const initials = parent.parentName
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase();
+        return {
+          parentId: parent.parentId,
+          userId: parent.userId,
+          parentName: parent.parentName,
+          parentInitials: initials || "PA",
+          parentPhone: parent.parentPhone,
+          parentEmail: parent.parentEmail,
+          studentId: student?.id || parent.studentIds[0] || "",
+          studentName: student?.name || "Student",
+          studentGrade: student?.grade || student?.section || "",
+        };
+      });
+  }, [branchParents, messageThreads, students, sectionStudents]);
+
+  const handleInitiateChat = useCallback(
+    async (parentId: string, studentId: string) => {
+      const teacherId = getTeacherId();
+      if (!teacherId) return;
+
+      try {
+        const createdThread = await createChatThread({
+          parent: parentId,
+          teacher: teacherId,
+          student: studentId,
+        });
+        await refreshMessageThreads();
+        setActiveMessageThreadId(createdThread.id);
+        setActiveTab("Messages");
+      } catch {
+        const refreshedThreads = await refreshMessageThreads();
+        const resolvedThread = refreshedThreads.find(
+          (t) => t.studentId === studentId && t.parentId === parentId,
+        );
+        if (resolvedThread) {
+          setActiveMessageThreadId(resolvedThread.id);
+          setActiveTab("Messages");
+        }
+      }
+    },
+    [refreshMessageThreads],
+  );
 
   useEffect(() => {
     if (!authChecked) return;
@@ -720,10 +792,14 @@ export default function App() {
     }
     let cancelled = false;
     (async () => {
-      console.log("[HomeroomCheck] calling checkHomeroomStatus", { sectionId, academicYearId });
-      const result = await checkHomeroomStatus(sectionId, academicYearId);
-      console.log("[HomeroomCheck] result", result);
-      if (!cancelled) setIsHomeroomTeacher(result);
+      try {
+        console.log("[HomeroomCheck] calling checkHomeroomStatus", { sectionId, academicYearId });
+        const result = await checkHomeroomStatus(sectionId, academicYearId);
+        console.log("[HomeroomCheck] result", result);
+        if (!cancelled) setIsHomeroomTeacher(result);
+      } catch {
+        console.error("[HomeroomCheck] error checking homeroom status");
+      }
     })();
     return () => {
       cancelled = true;
@@ -952,7 +1028,11 @@ export default function App() {
   }, [selectedSubject, subjectOptions]);
 
   const handleMarkAllNotificationsRead = async () => {
-    setNotifications(await markAllNotificationsRead());
+    try {
+      setNotifications(await markAllNotificationsRead());
+    } catch {
+      console.error("Failed to mark notifications as read");
+    }
   };
 
   const handleLogout = () => {
@@ -1396,7 +1476,7 @@ export default function App() {
 
   return (
     <HomeroomProvider isHomeroomTeacher={isHomeroomTeacher}>
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
+    <div className="h-dvh overflow-hidden bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100 selection:text-[#1A237E]">
       {/* A. Left Sidebar */}
       <aside
         className={`w-72 sm:w-64 bg-white border-r border-slate-100 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 transform lg:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
@@ -1599,7 +1679,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="lg:ml-64 flex-1 flex flex-col min-w-0">
+      <main className="lg:ml-64 flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Toasts */}
         <div className="fixed top-4 right-4 z-[80] space-y-2 w-[min(360px,calc(100vw-2rem))]">
           {toasts.map((t) => (
@@ -1670,7 +1750,7 @@ export default function App() {
 
         {/* Dashboard Grid Container */}
         <div
-          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
+          className={`${activeTab === "Messages" ? "p-0 gap-0 overflow-hidden min-h-0" : "p-3 sm:p-4 md:p-8 gap-4 sm:gap-6 md:gap-8 overflow-y-auto"} flex flex-col flex-1 w-full max-w-full`}
         >
           {activeTab === "Overview" && (
             <div className="w-full space-y-8">
@@ -1825,6 +1905,8 @@ export default function App() {
               onThreadChange={setActiveMessageThreadId}
               threads={messageThreads}
               onThreadsUpdate={setMessageThreads}
+              availableParents={availableParents}
+              onInitiateChat={handleInitiateChat}
             />
           )}
           {activeTab === "Gradebook" && (
@@ -2690,7 +2772,7 @@ export default function App() {
                             {student.name}
                           </h3>
                           <p className="text-[9px] font-black text-slate-400 tracking-[0.1em] uppercase mt-0.5">
-                            EGA ID: {student.id}
+                            Kelem ID: {student.id}
                           </p>
                         </div>
                       </>

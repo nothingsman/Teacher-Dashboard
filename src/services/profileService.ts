@@ -83,7 +83,7 @@ const HARDCODED_PROFILE: TeacherProfile = {
   grade: "Grade 7",
   section: "Sec A",
   email: "sara.kassa@school.com",
-  employeeId: "EGA-7A-01",
+  employeeId: "KEL-7A-01",
   bio: "Focused on building strong learning habits and parent engagement.",
   specialization: "Primary Education",
   joiningDate: "2024-01-15",

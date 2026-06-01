@@ -2,14 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUp,
   Check,
   CheckCheck,
   ChevronDown,
   ChevronLeft,
   Loader2,
   Paperclip,
+  Plus,
   Search,
-  Send,
   User,
   Wifi,
   WifiOff,
@@ -27,11 +28,25 @@ import { getAccessToken } from "../services/authStore";
 import { getUserProfile } from "../services/userProfileStore";
 import type { ChatMessage, MediaFile, Thread, ThreadMessage } from "../services/messagesService";
 
+interface AvailableParent {
+  parentId: string;
+  userId: string;
+  parentName: string;
+  parentInitials: string;
+  parentPhone: string;
+  parentEmail: string;
+  studentId: string;
+  studentName: string;
+  studentGrade: string;
+}
+
 interface MessagesModuleProps {
   externalThreadId?: string | null;
   onThreadChange?: (id: string) => void;
   threads: Thread[];
   onThreadsUpdate: (threads: Thread[]) => void;
+  availableParents?: AvailableParent[];
+  onInitiateChat?: (parentId: string, studentId: string) => Promise<void>;
 }
 
 function toThreadMessage(message: ChatMessage, currentUserId: string | null): ThreadMessage {
@@ -70,6 +85,8 @@ const MessagesModule = ({
   onThreadChange,
   threads,
   onThreadsUpdate,
+  availableParents,
+  onInitiateChat,
 }: MessagesModuleProps) => {
   const currentUserId = getUserProfile()?.id ?? null;
   const reconnectTimerRef = useRef<number | null>(null);
@@ -106,6 +123,18 @@ const MessagesModule = ({
     );
   }, [threads, searchTerm]);
 
+  const filteredAvailableParents = useMemo(() => {
+    if (!availableParents) return [];
+    const needle = searchTerm.trim().toLowerCase();
+    if (!needle) return availableParents;
+    return availableParents.filter((parent) =>
+      [parent.parentName, parent.studentName]
+        .some((value) => value.toLowerCase().includes(needle)),
+    );
+  }, [availableParents, searchTerm]);
+
+  const showAvailableParents = filteredAvailableParents.length > 0;
+
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) || null,
     [threads, activeThreadId],
@@ -121,6 +150,12 @@ const MessagesModule = ({
       onThreadChange?.(threads[0].id);
     }
   }, [activeThreadId, threads, onThreadChange]);
+
+  useEffect(() => {
+    if (externalThreadId) {
+      setMobileView("chat");
+    }
+  }, [externalThreadId]);
 
   useEffect(() => {
     if (!activeThread || !activeThread.unreadCount) return;
@@ -429,7 +464,7 @@ const MessagesModule = ({
   return (
     <>
       <style>{`@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-    <div className="flex h-full w-full overflow-hidden bg-white">
+    <div className="flex min-h-0 flex-1 w-full overflow-hidden bg-white">
       <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
         <div className="border-b border-slate-100 p-5">
           <div className="mb-4 flex items-center justify-between">
@@ -477,10 +512,47 @@ const MessagesModule = ({
               )}
             </button>
           ))}
+          {showAvailableParents && (
+            <>
+              <div className="px-5 py-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Available Parents
+                </p>
+              </div>
+              {filteredAvailableParents.map((parent) => (
+                <button
+                  key={parent.parentId}
+                  type="button"
+                  onClick={() => {
+                    onInitiateChat?.(parent.parentId, parent.studentId);
+                  }}
+                  className="flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-slate-50 opacity-75 hover:opacity-100"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-sm font-bold text-slate-400">
+                    {parent.parentInitials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-900">{parent.parentName}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[#1A237E]">
+                      {parent.studentName}
+                    </p>
+                    <p className="truncate text-xs font-medium text-slate-400">
+                      Tap to start conversation
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1A237E]/10 text-[#1A237E]">
+                      <Plus size={14} strokeWidth={3} />
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
-      <div className={`flex-1 flex-col ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
+      <div className={`flex-1 flex-col min-h-0 ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
         {activeThread ? (
           <>
             <div className="flex items-center justify-between border-b border-slate-100 bg-white p-5">
@@ -673,9 +745,9 @@ const MessagesModule = ({
                   type="button"
                   onClick={handleSend}
                   disabled={!composerText.trim() && !selectedFile}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1A237E] text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1A237E] text-white transition hover:bg-blue-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 shadow-md shadow-[#1A237E]/20"
                 >
-                  <Send size={16} />
+                  <ArrowUp size={16} strokeWidth={2.5} />
                 </button>
               </div>
             </div>
@@ -685,7 +757,9 @@ const MessagesModule = ({
             <div>
               <h3 className="text-base font-bold text-slate-900">No conversations yet</h3>
               <p className="mt-2 text-sm text-slate-500">
-                Open a student and start a parent conversation from the dashboard.
+                {showAvailableParents
+                  ? "Select a parent from the sidebar to start a conversation."
+                  : "Open a student and start a parent conversation from the dashboard."}
               </p>
             </div>
           </div>
