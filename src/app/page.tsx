@@ -78,7 +78,7 @@ import { getAssessmentsForContext } from "../services/assessmentsService";
 import { getAccessToken, getTeacherId } from "../services/authStore";
 import { HomeroomProvider } from "../contexts/HomeroomContext";
 import { checkHomeroomStatus } from "../services/homeroomService";
-import { fetchSchoolName, fetchBranchName } from "../services/schoolService";
+import { fetchSchoolInfo } from "../services/schoolService";
 import { getParentsByBranch } from "../services/parentLinksService";
 import { ensureTeacherOrgBranch } from "../services/profileService";
 import { formatApiError } from "../services/errorUtils";
@@ -402,7 +402,20 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
   const [schoolName, setSchoolName] = useState<string | null>(null);
-  const [branchName, setBranchName] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSchoolInfo()
+      .then((info) => {
+        if (info) {
+          setSchoolName(info.schoolName);
+          setBranchName(info.branchName);
+          setLogoUrl(info.logoUrl);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -418,7 +431,6 @@ export default function App() {
   const isAttendanceReadOnly = !isHomeroomTeacher;
   const cantEdit = isAttendanceReadOnly || selectedDateISO !== todayISO;
 
-  // Force Day view when attendance is read-only (non-homeroom teacher)
   useEffect(() => {
     if (isAttendanceReadOnly && attendanceView !== "Day") {
       setAttendanceView("Day");
@@ -461,36 +473,6 @@ export default function App() {
     window.addEventListener("mousedown", handleClickOutside);
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [isProfileMenuOpen]);
-
-  // Student and Attendance State
-  const [students, setStudents] = useState<Student[]>([]);
-  const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
-  const [taskCount, setTaskCount] = useState<number>(0);
-  const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
-
-  useEffect(() => {
-    if (!authChecked) return;
-    getStudents()
-      .then(setStudents)
-      .catch(() => {});
-  }, [authChecked]);
-
-  useEffect(() => {
-    fetchSchoolName()
-      .then((name) => {
-        if (name) setSchoolName(name);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    fetchBranchName()
-      .then((name) => {
-        if (name) setBranchName(name);
-      })
-      .catch(() => {});
-  }, []);
-
 
   const [notifications, setNotifications] = useState<
     import("../services").Notification[]
@@ -537,6 +519,18 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, [authChecked]);
+
+  const [students, setStudents] = useState<Student[]>([]);
+  const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
+  const [taskCount, setTaskCount] = useState<number>(0);
+  const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    getStudents()
+      .then(setStudents)
+      .catch(() => {});
   }, [authChecked]);
 
   const [studentAnalytics, setStudentAnalytics] = useState<StudentAnalytics[]>(
@@ -1515,13 +1509,21 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-linear-to-br from-[#1A237E] to-[#3949AB] rounded-xl flex items-center justify-center shadow-md shadow-blue-900/15 shrink-0 ring-1 ring-white/20">
-                <Hexagon
-                  className="text-white fill-white/10"
-                  size={18}
-                  strokeWidth={2.5}
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={schoolName || "School logo"}
+                  className="w-10 h-10 rounded-xl object-contain bg-white border border-slate-100 shrink-0"
                 />
-              </div>
+              ) : (
+                <div className="w-10 h-10 bg-linear-to-br from-[#1A237E] to-[#3949AB] rounded-xl flex items-center justify-center shadow-md shadow-blue-900/15 shrink-0 ring-1 ring-white/20">
+                  <Hexagon
+                    className="text-white fill-white/10"
+                    size={18}
+                    strokeWidth={2.5}
+                  />
+                </div>
+              )}
               <div className="flex flex-col min-w-0">
                 <h2 className="text-[12px] font-black uppercase tracking-tight text-slate-800 truncate leading-tight">
                   {schoolName || "School"}
