@@ -333,6 +333,6 @@ This project was developed as a Software Engineering final year project by the f
     Department of Software Engineering
   </p>
   <p>
-    <em>© 2026 Kelem Teacher Dashboard. All rights reserved.</em>
+    <em>© 2025 Ethio-Global Academy Teacher Dashboard. All rights reserved.</em>
   </p>
 </div>
