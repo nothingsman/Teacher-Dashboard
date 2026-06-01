@@ -9,10 +9,6 @@ coverage/
 !.env.example
 tsconfig.tsbuildinfo
 
-# Playwright
-test-results/
-playwright-report/
-
 # Editor & tooling
 .vscode/
 .kiro/
