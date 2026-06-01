@@ -29,11 +29,11 @@ interface BranchDetailResponse {
 
 async function resolveMediaUrl(mediaId: string): Promise<string | null> {
   try {
-    const res = await request<{ download_url: string }>(
+    const res = await request<{ data: { download_url: string } }>(
       "GET",
       `/api/media/${mediaId}/url`,
     );
-    return res.download_url ?? null;
+    return res.data?.download_url ?? null;
   } catch {
     return null;
   }
