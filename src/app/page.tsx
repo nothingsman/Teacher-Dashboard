@@ -693,6 +693,68 @@ export default function App() {
     hydrateMessageThread(visibleMessageThreadId).catch(() => undefined);
   }, [activeTab, authChecked, hydrateMessageThread, visibleMessageThreadId]);
 
+  const availableParents = useMemo(() => {
+    const threadedStudentIds = new Set(messageThreads.map((t) => t.studentId));
+    return branchParents
+      .filter((parent) => {
+        const relevantStudents = parent.studentIds.filter(
+          (sid) =>
+            sectionStudents.length === 0 ||
+            sectionStudents.some((s) => s.id === sid),
+        );
+        return relevantStudents.some((sid) => !threadedStudentIds.has(sid));
+      })
+      .map((parent) => {
+        const student = students.find(
+          (s) =>
+            parent.studentIds.includes(s.id) && !threadedStudentIds.has(s.id),
+        );
+        const initials = parent.parentName
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase();
+        return {
+          parentId: parent.parentId,
+          userId: parent.userId,
+          parentName: parent.parentName,
+          parentInitials: initials || "PA",
+          parentPhone: parent.parentPhone,
+          parentEmail: parent.parentEmail,
+          studentId: student?.id || parent.studentIds[0] || "",
+          studentName: student?.name || "Student",
+          studentGrade: student?.grade || student?.section || "",
+        };
+      });
+  }, [branchParents, messageThreads, students, sectionStudents]);
+
+  const handleInitiateChat = useCallback(
+    async (parentId: string, studentId: string) => {
+      const teacherId = getTeacherId();
+      if (!teacherId) return;
+
+      try {
+        const createdThread = await createChatThread({
+          parent: parentId,
+          teacher: teacherId,
+          student: studentId,
+        });
+        await refreshMessageThreadMetadata();
+        setActiveMessageThreadId(createdThread.id);
+        setActiveTab("Messages");
+      } catch {
+        const rawThreads = await refreshMessageThreadMetadata();
+        const match = rawThreads.find(
+          (t) => t.student === studentId && t.parent === parentId,
+        );
+        if (match) setActiveMessageThreadId(match.id);
+        setActiveTab("Messages");
+      }
+    },
+    [refreshMessageThreadMetadata],
+  );
+
   type AttendanceUiStatus = "present" | "absent" | "late" | "excused";
   type AttendanceUiEntry = {
     status: AttendanceUiStatus;

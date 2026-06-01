@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle, Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loginTeacher, formatApiError, restoreTeacherSession } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
