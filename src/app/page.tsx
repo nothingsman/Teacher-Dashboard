@@ -608,12 +608,21 @@ export default function App() {
               }))
             : [];
 
-          return toThreadView(
+          const nextThread = toThreadView(
             thread,
             threadMessages,
             students,
             branchParents,
           );
+
+          if (existing && !canReuseMessages && existing.messages.length > 0) {
+            return {
+              ...nextThread,
+              messages: existing.messages,
+            };
+          }
+
+          return nextThread;
         })
         .sort(
           (left, right) =>
