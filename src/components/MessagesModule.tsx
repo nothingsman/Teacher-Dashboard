@@ -23,7 +23,7 @@ import {
   sendChatMessage,
   uploadChatAttachment,
 } from "../services/messagesService";
-import { getAccessToken } from "../services/authStore";
+import { ensureAccessToken } from "../services/apiClient";
 import { getUserProfile } from "../services/userProfileStore";
 import type { ChatMessage, MediaFile, Thread, ThreadMessage } from "../services/messagesService";
 
@@ -183,18 +183,21 @@ const MessagesModule = ({
       return;
     }
 
-    const token = getAccessToken();
-    if (!token) {
-      setSocketState("disconnected");
-      return;
-    }
-
     let disposed = false;
     let reconnectAttempts = 0;
+    let shouldForceRefresh = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
       setSocketState(reconnectAttempts === 0 ? "connecting" : "reconnecting");
+      const token = await ensureAccessToken(shouldForceRefresh);
+      shouldForceRefresh = false;
+      if (disposed) return;
+      if (!token) {
+        setSocketState("disconnected");
+        return;
+      }
+
       const socket = new WebSocket(buildChatWebsocketUrl(activeThreadId, token));
       socketRef.current = socket;
 
@@ -263,16 +266,21 @@ const MessagesModule = ({
         socket.close();
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (disposed) return;
         setSocketState("disconnected");
+        shouldForceRefresh = event.code === 4403;
         reconnectAttempts += 1;
         const delay = Math.min(1000 * 2 ** (reconnectAttempts - 1), 10000);
         reconnectTimerRef.current = window.setTimeout(connect, delay);
       };
     };
 
-    connect();
+    connect().catch(() => {
+      if (!disposed) {
+        setSocketState("disconnected");
+      }
+    });
 
     return () => {
       disposed = true;

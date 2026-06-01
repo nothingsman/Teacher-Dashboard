@@ -24,6 +24,7 @@ import {
   clearTokens,
   decodeJwtPayload,
 } from "./authStore";
+import { clearUserProfile } from "./userProfileStore";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -39,6 +40,21 @@ type TokenRefreshResponse = {
 
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
+let onUnauthorized: () => void = () => {
+  clearTokens();
+  clearUserProfile();
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.replace("/login");
+  }
+};
+
+export function configureUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler;
+}
+
+export function handleUnauthorized() {
+  onUnauthorized();
+}
 
 async function refreshAccessToken(): Promise<string | null> {
   if (isRefreshing && refreshPromise) {
@@ -95,6 +111,28 @@ async function refreshAccessToken(): Promise<string | null> {
   })();
 
   return refreshPromise;
+}
+
+function isExpiredToken(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+  if (typeof exp !== "number") return false;
+  return exp * 1000 <= Date.now();
+}
+
+export async function ensureAccessToken(forceRefresh = false): Promise<string | null> {
+  const token = getAccessToken();
+  if (!forceRefresh && token && !isExpiredToken(token)) {
+    return token;
+  }
+
+  const refreshedToken = await refreshAccessToken();
+  if (refreshedToken) {
+    return refreshedToken;
+  }
+
+  onUnauthorized();
+  return null;
 }
 
 /**
@@ -176,13 +214,13 @@ export async function request<T>(
         res = await fetch(url, retryInit);
         console.log(`📊 Retry response status: ${res.status}`);
       } else {
-        clearTokens();
+        onUnauthorized();
         throw new ApiError("Session expired. Please sign in again.", 401);
       }
     }
 
     if (res.status === 401 && !options.skipAuth) {
-      clearTokens();
+      onUnauthorized();
       throw new ApiError("Session expired. Please sign in again.", 401);
     }
 
