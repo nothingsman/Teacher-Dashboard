@@ -156,6 +156,28 @@ export async function completeTeacherInvitation(
   );
 }
 
+export async function resetPassword(email: string): Promise<void> {
+  await request<void>(
+    "POST",
+    "/auth/users/reset_password/",
+    { email },
+    { skipAuth: true },
+  );
+}
+
+export async function resetPasswordConfirm(
+  uid: string,
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  await request<void>(
+    "POST",
+    "/auth/users/reset_password_confirm/",
+    { uid, token, new_password: newPassword },
+    { skipAuth: true },
+  );
+}
+
 export function logoutTeacher() {
   clearTokens();
   clearUserProfile();

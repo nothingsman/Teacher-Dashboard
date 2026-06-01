@@ -2,15 +2,17 @@
 
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
-import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
+import { CheckCircle, Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loginTeacher, formatApiError } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
 
 export default function TeacherLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reset = searchParams.get("reset") === "true";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -100,6 +102,17 @@ export default function TeacherLoginPage() {
               </p>
             </div>
 
+            {reset && (
+              <div className="mb-6">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-start gap-3 shadow-sm">
+                  <CheckCircle size={18} className="text-emerald-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-emerald-800 flex-1">
+                    Your password has been reset! You can now login with your new password.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="mb-6">
                 <ErrorBanner
@@ -154,6 +167,15 @@ export default function TeacherLoginPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+              </div>
+
+              <div className="flex justify-end">
+                <a
+                  href="/forgot-password"
+                  className="text-sm font-medium text-[#1A237E] hover:text-blue-800 transition-colors"
+                >
+                  Forgot password?
+                </a>
               </div>
 
               <button
