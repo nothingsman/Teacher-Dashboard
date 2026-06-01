@@ -90,6 +90,7 @@ import type {
   TeacherSection,
 } from "../services";
 import SettingsModal from "../components/SettingsModal";
+import ProfileModal from "../components/ProfileModal";
 import ScheduleModule, {
   OverviewScheduleWidget,
 } from "../components/ScheduleModule";
@@ -398,6 +399,7 @@ export default function App() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
   const [schoolName, setSchoolName] = useState<string | null>(null);
   const [branchName, setBranchName] = useState<string | null>(null);
@@ -1659,7 +1661,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  router.push("/profile");
+                  setIsProfileOpen(true);
                 }}
                 className="w-full px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
               >
@@ -2985,6 +2987,16 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      <ProfileModal
+        open={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        profile={teacherProfile}
+        onProfileUpdated={(updated) => {
+          setTeacherProfile(updated);
+          setIsProfileOpen(false);
+        }}
+      />
 
       <SettingsModal
         open={isSettingsOpen}

@@ -5,12 +5,15 @@ import { Mail, ArrowLeft, Loader2, AlertCircle, CheckCircle } from "lucide-react
 import { motion } from "motion/react";
 import Link from "next/link";
 import { resetPassword, formatAuthError } from "../../services";
+import { LegalModal, TermsOfService, PrivacyPolicy } from "../../components/LegalModal";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -120,6 +123,26 @@ export default function ForgotPasswordPage() {
                       "Send reset link"
                     )}
                   </button>
+
+                  <p className="mt-6 text-center text-xs text-slate-500">
+                    By clicking continue, you agree to our{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowTerms(true)}
+                      className="underline hover:text-slate-700 font-medium"
+                    >
+                      Terms of Service
+                    </button>{" "}
+                    and{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacy(true)}
+                      className="underline hover:text-slate-700 font-medium"
+                    >
+                      Privacy Policy
+                    </button>
+                    .
+                  </p>
                 </form>
               </>
             ) : (
@@ -150,6 +173,14 @@ export default function ForgotPasswordPage() {
           </motion.div>
         </div>
       </div>
+
+      <LegalModal isOpen={showTerms} onClose={() => setShowTerms(false)} title="Terms of Service">
+        <TermsOfService />
+      </LegalModal>
+
+      <LegalModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="Privacy Policy">
+        <PrivacyPolicy />
+      </LegalModal>
     </div>
   );
 }

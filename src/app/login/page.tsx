@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { loginTeacher, formatApiError } from "../../services";
 import { getAccessToken } from "../../services/authStore";
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { LegalModal, TermsOfService, PrivacyPolicy } from "../../components/LegalModal";
 
 function LoginInner() {
   const router = useRouter();
@@ -16,6 +17,8 @@ function LoginInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ title?: string; message: string; severity: "error" | "warning" | "info" } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     const existingToken = getAccessToken();
@@ -188,12 +191,36 @@ function LoginInner() {
               </button>
             </form>
 
-            <p className="text-xs text-slate-500 mt-6">
-              Need access? Contact your school administrator for an invite.
+            <p className="mt-6 text-center text-xs text-slate-500">
+              By clicking continue, you agree to our{" "}
+              <button
+                type="button"
+                onClick={() => setShowTerms(true)}
+                className="underline hover:text-slate-700 font-medium"
+              >
+                Terms of Service
+              </button>{" "}
+              and{" "}
+              <button
+                type="button"
+                onClick={() => setShowPrivacy(true)}
+                className="underline hover:text-slate-700 font-medium"
+              >
+                Privacy Policy
+              </button>
+              .
             </p>
           </motion.div>
         </div>
       </div>
+
+      <LegalModal isOpen={showTerms} onClose={() => setShowTerms(false)} title="Terms of Service">
+        <TermsOfService />
+      </LegalModal>
+
+      <LegalModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="Privacy Policy">
+        <PrivacyPolicy />
+      </LegalModal>
     </div>
   );
 }

@@ -474,20 +474,21 @@ const MessagesModule = ({
       <style>{`@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
     <div className="flex min-h-0 flex-1 w-full overflow-hidden bg-white">
       <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col ${mobileView === "threads" ? "flex" : "hidden md:flex"}`}>
-        <div className="border-b border-slate-100 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">Messages</h2>
-            <span className="rounded-full bg-[#1A237E] px-3 py-1 text-[11px] font-bold text-white">
+        <div className="border-b border-slate-100 p-4 sm:p-5">
+          <div className="mb-3 sm:mb-4 flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">Messages</h2>
+            <span className="rounded-full bg-[#1A237E] px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold text-white">
               {threads.length}
             </span>
           </div>
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={13} className="sm:hidden absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="hidden sm:block absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search parent or student..."
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#1A237E] focus:bg-white"
+              placeholder="Search..."
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-slate-50 py-2.5 sm:py-3 pl-9 sm:pl-10 pr-3 sm:pr-4 text-xs sm:text-sm font-medium text-slate-800 outline-none transition focus:border-[#1A237E] focus:bg-white"
             />
           </div>
         </div>
@@ -498,23 +499,23 @@ const MessagesModule = ({
               key={thread.id}
               type="button"
               onClick={() => handleThreadSelect(thread.id)}
-              className={`flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-slate-50 ${thread.id === activeThreadId ? "border-l-[3px] border-[#1A237E] bg-slate-50" : ""}`}
+              className={`flex w-full items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-slate-50 ${thread.id === activeThreadId ? "border-l-[3px] border-[#1A237E] bg-slate-50" : ""}`}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-800">
+              <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] sm:text-sm font-bold text-slate-800">
                 {thread.parentInitials}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-bold text-slate-900">{thread.parentName}</p>
-                  <span className="shrink-0 text-[10px] font-semibold text-slate-400">{thread.lastTime}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs sm:text-sm font-bold text-slate-900">{thread.parentName}</p>
+                  <span className="shrink-0 text-[9px] sm:text-[10px] font-semibold text-slate-400">{thread.lastTime}</span>
                 </div>
-                <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[#1A237E]">
+                <p className="mt-0.5 sm:mt-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-[#1A237E]">
                   {thread.studentName}
                 </p>
-                <p className="truncate text-xs font-medium text-slate-500">{thread.preview || "No messages yet"}</p>
+                <p className="truncate text-[11px] sm:text-xs font-medium text-slate-500 mt-0.5">{thread.preview || "No messages yet"}</p>
               </div>
               {thread.unreadCount > 0 && (
-                <span className="mt-1 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                <span className="rounded-full bg-rose-500 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-white">
                   {thread.unreadCount}
                 </span>
               )}
@@ -522,8 +523,8 @@ const MessagesModule = ({
           ))}
           {showAvailableParents && (
             <>
-              <div className="px-5 py-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <div className="px-3 sm:px-5 py-2 sm:py-3">
+                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
                   Available Parents
                 </p>
               </div>
@@ -534,23 +535,23 @@ const MessagesModule = ({
                   onClick={() => {
                     onInitiateChat?.(parent.parentId, parent.studentId);
                   }}
-                  className="flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-slate-50 opacity-75 hover:opacity-100"
+                  className="flex w-full items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-slate-50 opacity-75 hover:opacity-100"
                 >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-sm font-bold text-slate-400">
+                  <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-[10px] sm:text-sm font-bold text-slate-400">
                     {parent.parentInitials}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-900">{parent.parentName}</p>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[#1A237E]">
+                    <p className="truncate text-xs sm:text-sm font-bold text-slate-900">{parent.parentName}</p>
+                    <p className="mt-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-[#1A237E]">
                       {parent.studentName}
                     </p>
-                    <p className="truncate text-xs font-medium text-slate-400">
-                      Tap to start conversation
+                    <p className="truncate text-[11px] sm:text-xs font-medium text-slate-400 mt-0.5">
+                      Tap to start
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1A237E]/10 text-[#1A237E]">
-                      <Plus size={14} strokeWidth={3} />
+                    <div className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-[#1A237E]/10 text-[#1A237E]">
+                      <Plus size={13} strokeWidth={3} />
                     </div>
                   </div>
                 </button>
@@ -563,34 +564,34 @@ const MessagesModule = ({
       <div className={`flex-1 flex-col min-h-0 ${mobileView === "chat" ? "flex" : "hidden md:flex"}`}>
         {activeThread ? (
           <>
-            <div className="flex items-center justify-between border-b border-slate-100 bg-white p-5">
-              <div className="flex min-w-0 items-center gap-3">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-white px-3 sm:px-5 py-3 sm:py-5">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setMobileView("threads")}
-                  className="rounded-xl p-2 text-[#1A237E] md:hidden"
+                  className="rounded-xl p-1.5 sm:p-2 text-[#1A237E] md:hidden"
                 >
                   <ChevronLeft size={18} />
                 </button>
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-800">
+                <div className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-slate-100 text-[10px] sm:text-sm font-bold text-slate-800">
                   {activeThread.parentInitials}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="truncate text-base font-bold text-slate-900">{activeThread.parentName}</h3>
-                  <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <span>{activeThread.studentName}</span>
+                  <h3 className="truncate text-sm sm:text-base font-bold text-slate-900">{activeThread.parentName}</h3>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-semibold text-slate-500">
+                    <span className="truncate">{activeThread.studentName}</span>
                     <span>·</span>
-                    <span>{activeThread.studentGrade}</span>
+                    <span className="hidden sm:inline">{activeThread.studentGrade}</span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
-                {socketState === "connected" ? <Wifi size={14} /> : <WifiOff size={14} />}
-                <span>{socketState === "connected" ? "Live" : socketState === "connecting" || socketState === "reconnecting" ? "Connecting" : "Offline"}</span>
+              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-slate-50 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-500">
+                {socketState === "connected" ? <Wifi size={12} className="sm:w-[14px]" /> : <WifiOff size={12} className="sm:w-[14px]" />}
+                <span className="hidden sm:inline">{socketState === "connected" ? "Live" : socketState === "connecting" || socketState === "reconnecting" ? "Connecting" : "Offline"}</span>
               </div>
             </div>
 
-            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto bg-slate-50/70 p-5">
+            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto bg-slate-50/70 p-3 sm:p-5">
               {activeThread.messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="max-w-md text-center">
@@ -691,7 +692,7 @@ const MessagesModule = ({
               )}
             </div>
 
-            <div className="border-t border-slate-100 bg-white px-4 py-3">
+            <div className="border-t border-slate-100 bg-white px-2 sm:px-4 py-2 sm:py-3">
               {selectedFile && (
                 <div className="mb-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -722,7 +723,7 @@ const MessagesModule = ({
                 </div>
               )}
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-1.5 sm:gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -732,9 +733,9 @@ const MessagesModule = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
+                  className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
                 >
-                  <Paperclip size={16} />
+                  <Paperclip size={14} className="sm:w-4" />
                 </button>
                 <textarea
                   rows={1}
@@ -747,23 +748,23 @@ const MessagesModule = ({
                     }
                   }}
                   placeholder="Type a message..."
-                  className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition focus:border-[#1A237E] focus:bg-white"
+                  className="max-h-28 min-h-[36px] sm:min-h-[40px] flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 sm:px-3.5 py-2 sm:py-2.5 text-xs sm:text-sm text-slate-800 outline-none transition focus:border-[#1A237E] focus:bg-white"
                 />
                 <button
                   type="button"
                   onClick={handleSend}
                   disabled={!composerText.trim() && !selectedFile}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1A237E] text-white transition hover:bg-blue-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 shadow-md shadow-[#1A237E]/20"
+                  className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-[#1A237E] text-white transition hover:bg-blue-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 shadow-md shadow-[#1A237E]/20"
                 >
-                  <ArrowUp size={16} strokeWidth={2.5} />
+                  <ArrowUp size={14} className="sm:w-4" strokeWidth={2.5} />
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex h-full items-center justify-center bg-slate-50/60 p-6 text-center">
+          <div className="flex h-full items-center justify-center bg-slate-50/60 p-4 sm:p-6 text-center">
             <div>
-              <h3 className="text-base font-bold text-slate-900">No conversations yet</h3>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">No conversations yet</h3>
               <p className="mt-2 text-sm text-slate-500">
                 {showAvailableParents
                   ? "Select a parent from the sidebar to start a conversation."
