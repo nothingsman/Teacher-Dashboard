@@ -2,7 +2,13 @@
 // Validates: Requirements 1.6
 
 import * as fc from 'fast-check';
-import { ApiError, request } from '../apiClient';
+import {
+  ApiError,
+  configureUnauthorizedHandler,
+  ensureAccessToken,
+  request,
+} from '../apiClient';
+import { clearTokens, setTokens } from '../authStore';
 
 /**
  * Property 2: ApiError shape on HTTP failure
@@ -31,6 +37,10 @@ describe('apiClient — Property 2: ApiError shape on HTTP failure', () => {
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
     jest.restoreAllMocks();
+    clearTokens();
+    configureUnauthorizedHandler(() => {
+      clearTokens();
+    });
     // Restore original fetch (may be undefined in jsdom)
     global.fetch = originalFetch;
   });
@@ -75,5 +85,51 @@ describe('apiClient — Property 2: ApiError shape on HTTP failure', () => {
       ),
       { numRuns: 100 }
     );
+  });
+
+  it('ensureAccessToken returns the current unexpired token', async () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 60 * 60;
+    const payload = Buffer.from(JSON.stringify({ exp: futureExp })).toString('base64url');
+    const accessToken = `header.${payload}.signature`;
+
+    setTokens(accessToken, 'refresh-token');
+
+    await expect(ensureAccessToken()).resolves.toBe(accessToken);
+  });
+
+  it('ensureAccessToken refreshes an expired token', async () => {
+    const expiredExp = Math.floor(Date.now() / 1000) - 60;
+    const payload = Buffer.from(JSON.stringify({ exp: expiredExp })).toString('base64url');
+    setTokens(`header.${payload}.signature`, 'refresh-token');
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: jest.fn().mockResolvedValue({ access: 'fresh-access', refresh: 'fresh-refresh' }),
+    });
+
+    await expect(ensureAccessToken()).resolves.toBe('fresh-access');
+  });
+
+  it('ensureAccessToken invokes unauthorized handling when refresh fails', async () => {
+    const expiredExp = Math.floor(Date.now() / 1000) - 60;
+    const payload = Buffer.from(JSON.stringify({ exp: expiredExp })).toString('base64url');
+    setTokens(`header.${payload}.signature`, 'refresh-token');
+
+    const unauthorizedHandler = jest.fn(() => {
+      clearTokens();
+    });
+    configureUnauthorizedHandler(unauthorizedHandler);
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await expect(ensureAccessToken()).resolves.toBeNull();
+    expect(unauthorizedHandler).toHaveBeenCalledTimes(1);
   });
 });
