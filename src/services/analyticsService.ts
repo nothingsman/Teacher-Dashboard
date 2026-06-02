@@ -241,7 +241,8 @@ export async function getStudentAnalytics(): Promise<StudentAnalytics[]> {
     return [...mockStudentStore];
   }
   try {
-    return await request<StudentAnalytics[]>('GET', '/api/analytics/students');
+    const response = await request<any>('GET', '/api/analytics/students');
+    return Array.isArray(response) ? response : (response?.results || []);
   } catch {
     return [...mockStudentStore];
   }

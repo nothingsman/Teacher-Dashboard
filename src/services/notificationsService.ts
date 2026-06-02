@@ -45,7 +45,8 @@ export function _setMockStore(notifications: Notification[]): void {
 export async function getNotifications(): Promise<Notification[]> {
   if (IS_MOCK) return [...mockStore];
   try {
-    return await request<Notification[]>('GET', '/api/notifications');
+    const response = await request<any>('GET', '/api/notifications');
+    return Array.isArray(response) ? response : (response?.results || []);
   } catch {
     return [...mockStore];
   }
@@ -61,7 +62,8 @@ export async function markAllNotificationsRead(): Promise<Notification[]> {
     return [...mockStore];
   }
   try {
-    return await request<Notification[]>('POST', '/api/notifications/mark-all-read');
+    const response = await request<any>('POST', '/api/notifications/mark-all-read');
+    return Array.isArray(response) ? response : (response?.results || []);
   } catch {
     mockStore = mockStore.map((n) => ({ ...n, read: true }));
     return [...mockStore];
