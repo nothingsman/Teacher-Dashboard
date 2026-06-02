@@ -224,7 +224,11 @@ export async function getSectionAnalytics(sectionName: string): Promise<SectionA
   if (IS_MOCK) {
     return SECTION_DATA[sectionName] ?? null;
   }
-  return request<SectionAnalytics>('GET', `/api/analytics/sections/${encodeURIComponent(sectionName)}`);
+  try {
+    return await request<SectionAnalytics>('GET', `/api/analytics/sections/${encodeURIComponent(sectionName)}`);
+  } catch {
+    return SECTION_DATA[sectionName] ?? null;
+  }
 }
 
 /**
@@ -236,5 +240,9 @@ export async function getStudentAnalytics(): Promise<StudentAnalytics[]> {
   if (IS_MOCK) {
     return [...mockStudentStore];
   }
-  return request<StudentAnalytics[]>('GET', '/api/analytics/students');
+  try {
+    return await request<StudentAnalytics[]>('GET', '/api/analytics/students');
+  } catch {
+    return [...mockStudentStore];
+  }
 }
