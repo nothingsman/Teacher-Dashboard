@@ -323,7 +323,9 @@ function mapStudentFromApi(api: StudentApi): Student {
 export async function getStudents(): Promise<Student[]> {
   if (IS_MOCK) return [...mockStore];
   try {
-    return await request<Student[]>("GET", "/api/students/");
+    const response = await request<StudentListResponse | StudentApi[]>("GET", "/api/students/");
+    const results = Array.isArray(response) ? response : (response as StudentListResponse).results || [];
+    return results.map(mapStudentFromApi);
   } catch {
     return [...mockStore];
   }
@@ -337,10 +339,12 @@ export async function getStudentsBySection(
 ): Promise<Student[]> {
   if (IS_MOCK) return mockStore.filter((s) => s.section === section);
   try {
-    return await request<Student[]>(
+    const response = await request<StudentListResponse | StudentApi[]>(
       "GET",
       `/api/students/?section=${encodeURIComponent(section)}`,
     );
+    const results = Array.isArray(response) ? response : (response as StudentListResponse).results || [];
+    return results.map(mapStudentFromApi);
   } catch {
     return mockStore.filter((s) => s.section === section);
   }
