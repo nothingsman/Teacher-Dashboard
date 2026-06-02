@@ -206,15 +206,6 @@ export default function ProfileModal({ open, onClose, profile, onProfileUpdated 
                 <Field label="Role">
                   <div className={inputCls(false)}>{profile?.role ?? "Teacher"}</div>
                 </Field>
-                <Field label="Employee ID">
-                  <input
-                    type="text"
-                    value={form.employeeId ?? ""}
-                    onChange={(e) => handleChange("employeeId", e.target.value)}
-                    disabled={!editing}
-                    className={inputCls(editing)}
-                  />
-                </Field>
                 <Field label="Specialization">
                   <input
                     type="text"

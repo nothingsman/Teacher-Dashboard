@@ -33,7 +33,6 @@ import {
   Atom,
   FlaskConical,
   Hexagon,
-  Shield,
   Sparkles,
   User,
   Pencil,
@@ -412,10 +411,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
-  const unreadMessageCount = messageThreads.reduce(
-    (sum, thread) => sum + thread.unreadCount,
-    0,
-  );
   const [schoolName, setSchoolName] = useState<string | null>(null);
   const [branchName, setBranchName] = useState<string>("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -1586,19 +1581,6 @@ export default function App() {
         <div className="px-4 sm:px-5 pt-5 sm:pt-7 pb-4 border-b border-slate-100 bg-linear-to-b from-white to-slate-50/30">
           {/* Provider & Institution Branding */}
           <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 px-2.5 py-1 bg-[#1A237E]/8 rounded-full border border-[#1A237E]/10">
-                <Shield
-                  size={10}
-                  className="text-[#1A237E]"
-                  fill="currentColor"
-                />
-                <span className="text-[9px] font-black text-[#1A237E] uppercase tracking-[0.2em] leading-none">
-                  Kelem Platform
-                </span>
-              </div>
-            </div>
-
             <div className="flex items-center gap-3">
               {logoUrl ? (
                 <img
@@ -1683,14 +1665,12 @@ export default function App() {
             icon={Users}
             label="Students"
             isActive={activeTab === "Students"}
-            count={sectionStudentCount}
             onClick={() => setActiveTab("Students")}
           />
           <SidebarItem
             icon={ClipboardList}
             label="Tasks"
             isActive={activeTab === "Tasks"}
-            count={taskCount}
             onClick={() => setActiveTab("Tasks")}
           />
           <SidebarItem
@@ -1715,7 +1695,6 @@ export default function App() {
             icon={MessageSquare}
             label="Messages"
             isActive={activeTab === "Messages"}
-            count={unreadMessageCount || undefined}
             onClick={() => setActiveTab("Messages")}
           />
           <SidebarItem
