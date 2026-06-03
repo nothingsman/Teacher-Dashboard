@@ -24,7 +24,7 @@ describe('notificationsService — Property 11: Mark all notifications read', ()
         fc.asyncProperty(
           fc.array(
             fc.record({
-              id: fc.nat(),
+              id: fc.string({ minLength: 1 }),
               title: fc.string(),
               desc: fc.string(),
               time: fc.string(),

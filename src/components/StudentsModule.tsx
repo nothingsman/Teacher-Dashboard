@@ -8,23 +8,24 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Search,
-  Filter,
-  Plus,
   CheckCircle,
   Minus,
   Eye,
   Edit2,
   X,
-  Phone,
-  Mail,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  Send,
-  ChevronDown,
+  Phone,
+  Mail,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getStudentsBySectionId } from "../services/studentsService";
+import {
+  getStudentsBySectionId,
+  triggerStudentInsightDemo,
+  type StudentInsightDemoTriggerResponse,
+} from "../services/studentsService";
 import { getAttendanceSummary, type AttendanceSummary } from "../services/attendanceService";
 import { getAssessmentResults, type AssessmentResult } from "../services/assessmentResultsService";
 import { getParentLinks, type ParentLink } from "../services/parentLinksService";
@@ -236,6 +237,15 @@ const StudentsModule = ({
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null);
   const [studentResults, setStudentResults] = useState<AssessmentResult[]>([]);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
+  const [demoTriggerState, setDemoTriggerState] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    result: StudentInsightDemoTriggerResponse | null;
+    error: string | null;
+  }>({
+    status: "idle",
+    result: null,
+    error: null,
+  });
 
   // Load attendance, academics, and parent links when a student is selected
   useEffect(() => {
@@ -243,6 +253,11 @@ const StudentsModule = ({
       setAttendanceSummary(null);
       setStudentResults([]);
       setParentLinks([]);
+      setDemoTriggerState({
+        status: "idle",
+        result: null,
+        error: null,
+      });
       return;
     }
     const acYearId = activeSection?.academicYearId;
@@ -363,6 +378,37 @@ const StudentsModule = ({
   const closeSheet = () => {
     setIsSheetOpen(false);
     setTimeout(() => setSelectedStudent(null), 300); // Wait for transition
+  };
+
+  const runInsightDemo = async () => {
+    if (!selectedStudent) {
+      return;
+    }
+
+    setDemoTriggerState({
+      status: "loading",
+      result: null,
+      error: null,
+    });
+
+    try {
+      const result = await triggerStudentInsightDemo(selectedStudent.id);
+      setDemoTriggerState({
+        status: "success",
+        result,
+        error: null,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to trigger the student insight demo.";
+      setDemoTriggerState({
+        status: "error",
+        result: null,
+        error: message,
+      });
+    }
   };
 
   const filteredStudents = useMemo(() => {
@@ -1277,6 +1323,67 @@ const StudentsModule = ({
 
               {/* Action Buttons Footer */}
               <div className="p-8 border-t border-slate-50 bg-slate-50/50 space-y-3">
+                {demoTriggerState.status !== "idle" && (
+                  <div
+                    className={`rounded-2xl border px-4 py-3 ${
+                      demoTriggerState.status === "error"
+                        ? "border-rose-100 bg-rose-50"
+                        : demoTriggerState.result?.created
+                          ? "border-emerald-100 bg-emerald-50"
+                          : "border-amber-100 bg-amber-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl ${
+                          demoTriggerState.status === "error"
+                            ? "bg-rose-100 text-rose-600"
+                            : demoTriggerState.result?.created
+                              ? "bg-emerald-100 text-emerald-600"
+                              : "bg-amber-100 text-amber-600"
+                        }`}
+                      >
+                        <Sparkles size={16} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          Insight Demo
+                        </p>
+                        <p className="text-xs font-bold text-slate-800">
+                          {demoTriggerState.status === "loading"
+                            ? "Running the student insight pipeline..."
+                            : demoTriggerState.error
+                              ? demoTriggerState.error
+                              : demoTriggerState.result?.message}
+                        </p>
+                        {demoTriggerState.result?.created && (
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            {demoTriggerState.result.reused_existing
+                              ? "Existing insight reused"
+                              : `${demoTriggerState.result.category} • ${demoTriggerState.result.risk_band} • ${demoTriggerState.result.delivery_status}`}
+                          </p>
+                        )}
+                        {demoTriggerState.result?.created && (
+                          <p className="text-[10px] text-slate-500">
+                            Open the Parent Site notifications for this student&apos;s parent to show the delivered alert.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    void runInsightDemo();
+                  }}
+                  disabled={!selectedStudent || demoTriggerState.status === "loading"}
+                  className="w-full py-4 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles size={14} />
+                  {demoTriggerState.status === "loading"
+                    ? "Running Insight Demo..."
+                    : "Run Insight Demo"}
+                </button>
                 <button
                   onClick={() => {
                     if (selectedStudent) {

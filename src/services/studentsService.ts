@@ -91,6 +91,20 @@ export interface StudentListResponse {
   results: StudentApi[];
 }
 
+export interface StudentInsightDemoTriggerResponse {
+  created: boolean;
+  reused_existing?: boolean;
+  insight_id?: string;
+  category?: string;
+  risk_band?: string;
+  delivery_status?: string;
+  reason_code?: string;
+  message: string;
+  source_event_type?: string;
+  source_model?: string;
+  source_id?: string;
+}
+
 // --- Mock Data ---
 
 let mockStore: Student[] = [
@@ -427,5 +441,30 @@ export async function updateStudent(
     "PATCH",
     `/api/students/${encodeURIComponent(id)}/`,
     changes,
+  );
+}
+
+export async function triggerStudentInsightDemo(
+  studentId: string,
+): Promise<StudentInsightDemoTriggerResponse> {
+  if (IS_MOCK) {
+    return {
+      created: true,
+      reused_existing: false,
+      insight_id: `demo-${studentId}`,
+      category: "ACADEMICS",
+      risk_band: "LOW",
+      delivery_status: "DELIVERED",
+      message:
+        "Insight generated and delivered through the parent notification flow.",
+      source_event_type: "ASSESSMENT_RESULT",
+      source_model: "assessments.AssessmentResult",
+      source_id: `mock-source-${studentId}`,
+    };
+  }
+
+  return request<StudentInsightDemoTriggerResponse>(
+    "POST",
+    `/api/students/${encodeURIComponent(studentId)}/trigger-insight-demo/`,
   );
 }
