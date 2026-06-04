@@ -6,6 +6,22 @@ import { request } from './apiClient';
 
 const IS_MOCK = !process.env.NEXT_PUBLIC_API_BASE_URL;
 
+const SUBJECT_COLOR_MAP: Record<string, string> = {
+  Mathematics: '#185FA5',
+  Physics: '#E24B4A',
+  History: '#1D9E75',
+  English: '#BA7517',
+  Chemistry: '#0891B2',
+};
+
+const MOCK_SECTION_ALIASES: Record<string, string> = {
+  'mock-section-a': 'Grade 7 — Section A',
+  'mock-section-b': 'Grade 7 — Section B',
+  'mock-section-c': 'Grade 8 — Section A',
+  'Sec A': 'Grade 7 — Section A',
+  'Sec B': 'Grade 7 — Section B',
+};
+
 // ---------------------------------------------------------------------------
 // Domain Types
 // ---------------------------------------------------------------------------
@@ -46,6 +62,57 @@ export interface StudentAnalytics {
   recentGrades: number[];
   risk: string;
 }
+
+export interface SectionAnalyticsLookup {
+  sectionId?: string;
+  sectionName?: string;
+}
+
+type SectionAnalyticsApi = {
+  section_id?: string;
+  section_name?: string;
+  students: number;
+  section_avg: number;
+  section_avg_trend: number[];
+  top_performers_trend: number[];
+  at_risk_trend: number[];
+  grade_distribution: { A: number; B: number; C: number; F: number };
+  attendance: { present: number; late: number; absent: number };
+  chronic_absentees: Array<{ name: string; initials: string; rate: number }>;
+  subject_averages: Array<{ subject: string; avg: number; color?: string }>;
+  submissions: { submitted: number; late: number; missing: number };
+  parent_engagement: { high: number; moderate: number; low: number };
+  activity_performance: Array<{
+    title: string;
+    type: string;
+    avg_pct: number;
+    avg_score: string;
+    grade: string;
+    submitted: number;
+    total: number;
+  }>;
+};
+
+type StudentAnalyticsApi = {
+  id: string;
+  name: string;
+  avatar: string;
+  overall_avg: number;
+  trend: number[];
+  subjects: Record<string, number>;
+  attendance: number;
+  parent_engagement: number;
+  submissions: { submitted: number; late: number; missing: number };
+  recent_grades: number[];
+  risk: string;
+};
+
+type StudentAnalyticsApiResponse =
+  | StudentAnalyticsApi[]
+  | {
+      count?: number;
+      results?: StudentAnalyticsApi[];
+    };
 
 // ---------------------------------------------------------------------------
 // Mock data — copied from AnalyticsModule.tsx (SECTION_DATA)
@@ -210,6 +277,61 @@ const STUDENT_ANALYTICS_DATA: StudentAnalytics[] = [
 // In-memory store for student analytics (mock mode)
 let mockStudentStore: StudentAnalytics[] = [...STUDENT_ANALYTICS_DATA];
 
+function resolveMockSectionName(lookup: SectionAnalyticsLookup): string | null {
+  const candidates = [lookup.sectionName, lookup.sectionId];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (SECTION_DATA[candidate]) return candidate;
+    if (MOCK_SECTION_ALIASES[candidate]) return MOCK_SECTION_ALIASES[candidate];
+  }
+  return null;
+}
+
+function mapSectionAnalytics(response: SectionAnalyticsApi): SectionAnalytics {
+  return {
+    students: response.students,
+    sectionAvg: response.section_avg,
+    sectionAvgTrend: response.section_avg_trend,
+    topPerformersTrend: response.top_performers_trend,
+    atRiskTrend: response.at_risk_trend,
+    gradeDistribution: response.grade_distribution,
+    attendance: response.attendance,
+    chronicAbsentees: response.chronic_absentees,
+    subjectAvgs: response.subject_averages.map((item) => ({
+      subject: item.subject,
+      avg: item.avg,
+      color: item.color ?? SUBJECT_COLOR_MAP[item.subject] ?? '#64748B',
+    })),
+    submissions: response.submissions,
+    parentEngagement: response.parent_engagement,
+    activityPerformance: response.activity_performance.map((item) => ({
+      title: item.title,
+      type: item.type,
+      avgPct: item.avg_pct,
+      avgScore: item.avg_score,
+      grade: item.grade,
+      submitted: item.submitted,
+      total: item.total,
+    })),
+  };
+}
+
+function mapStudentAnalytics(response: StudentAnalyticsApi): StudentAnalytics {
+  return {
+    id: response.id,
+    name: response.name,
+    avatar: response.avatar,
+    overallAvg: response.overall_avg,
+    trend: response.trend,
+    subjects: response.subjects,
+    attendance: response.attendance,
+    parentEngagement: response.parent_engagement,
+    submissions: response.submissions,
+    recentGrades: response.recent_grades,
+    risk: response.risk,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
@@ -220,14 +342,28 @@ let mockStudentStore: StudentAnalytics[] = [...STUDENT_ANALYTICS_DATA];
  *
  * Requirements: 5.1, 5.2, 5.5
  */
-export async function getSectionAnalytics(sectionName: string): Promise<SectionAnalytics | null> {
+export async function getSectionAnalytics(
+  lookup: string | SectionAnalyticsLookup,
+): Promise<SectionAnalytics | null> {
+  const sectionLookup =
+    typeof lookup === 'string' ? { sectionName: lookup } : lookup;
+  const mockSectionName = resolveMockSectionName(sectionLookup);
+
   if (IS_MOCK) {
-    return SECTION_DATA[sectionName] ?? null;
+    return mockSectionName ? SECTION_DATA[mockSectionName] ?? null : null;
   }
+
+  const sectionIdentifier = sectionLookup.sectionId ?? sectionLookup.sectionName;
+  if (!sectionIdentifier) return mockSectionName ? SECTION_DATA[mockSectionName] ?? null : null;
+
   try {
-    return await request<SectionAnalytics>('GET', `/api/analytics/sections/${encodeURIComponent(sectionName)}`);
+    const response = await request<SectionAnalyticsApi>(
+      'GET',
+      `/api/analytics/sections/${encodeURIComponent(sectionIdentifier)}/`,
+    );
+    return mapSectionAnalytics(response);
   } catch {
-    return SECTION_DATA[sectionName] ?? null;
+    return mockSectionName ? SECTION_DATA[mockSectionName] ?? null : null;
   }
 }
 
@@ -241,8 +377,12 @@ export async function getStudentAnalytics(): Promise<StudentAnalytics[]> {
     return [...mockStudentStore];
   }
   try {
-    const response = await request<any>('GET', '/api/analytics/students');
-    return Array.isArray(response) ? response : (response?.results || []);
+    const response = await request<StudentAnalyticsApiResponse>(
+      'GET',
+      '/api/analytics/students/',
+    );
+    const results = Array.isArray(response) ? response : (response.results ?? []);
+    return results.map(mapStudentAnalytics);
   } catch {
     return [...mockStudentStore];
   }

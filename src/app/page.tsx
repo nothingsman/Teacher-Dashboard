@@ -55,6 +55,7 @@ import {
 import type { BranchParent, ChatMessage, ChatThread, Thread, ThreadMessage } from "../services";
 import {
   createChatThread,
+  getDashboardOverview,
   formatThreadTimestamp,
   getStudents,
   getStudentsBySectionId,
@@ -86,6 +87,7 @@ import type {
   Student,
   TeacherProfile,
   StudentAnalytics,
+  DashboardOverview,
   TeacherSection,
 } from "../services";
 import SettingsModal from "../components/SettingsModal";
@@ -565,6 +567,8 @@ export default function App() {
   const [sectionStudentCount, setSectionStudentCount] = useState<number>(0);
   const [taskCount, setTaskCount] = useState<number>(0);
   const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
+  const [dashboardOverview, setDashboardOverview] =
+    useState<DashboardOverview | null>(null);
 
   useEffect(() => {
     if (!authChecked) return;
@@ -883,6 +887,41 @@ export default function App() {
       subjectOptions[0]
     );
   }, [selectedSubject, subjectOptions]);
+
+  useEffect(() => {
+    if (!authChecked || !activeSection) return;
+
+    let cancelled = false;
+
+    getDashboardOverview({
+      sectionId: activeSection.sectionId,
+      sectionName: activeSection.sectionName,
+      subjectId: activeSubject?.subjectId,
+      subjectName: activeSubject?.subjectName,
+      academicYearId: activeSection.academicYearId,
+    })
+      .then((overview) => {
+        if (!cancelled) {
+          setDashboardOverview(overview);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDashboardOverview(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authChecked,
+    activeSection?.sectionId,
+    activeSection?.sectionName,
+    activeSection?.academicYearId,
+    activeSubject?.subjectId,
+    activeSubject?.subjectName,
+  ]);
 
   // Check homeroom status when grade or section changes
   useEffect(() => {
@@ -2037,13 +2076,20 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                     <MetricCard
                       label="Total Students"
-                      value={String(sectionStudentCount)}
+                      value={String(
+                        dashboardOverview?.totalStudents ?? sectionStudentCount,
+                      )}
                       subtitle="ENROLLED"
                       icon={Users}
                     />
                     <MetricCard
                       label="Avg Performance"
                       value={(() => {
+                        if (
+                          typeof dashboardOverview?.averagePerformance === "number"
+                        ) {
+                          return dashboardOverview.averagePerformance.toFixed(1);
+                        }
                         if (studentAnalytics.length === 0) return "—";
                         const avg = studentAnalytics.reduce(
                           (s, a) => s + a.overallAvg,
@@ -2056,7 +2102,7 @@ export default function App() {
                     />
                     <MetricCard
                       label="Tasks Due"
-                      value={String(taskCount)}
+                      value={String(dashboardOverview?.tasksDue ?? taskCount)}
                       subtitle="PENDING"
                       icon={FileText}
                     />
