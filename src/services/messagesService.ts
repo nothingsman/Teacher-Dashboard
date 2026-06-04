@@ -93,6 +93,11 @@ export interface MultipartPartUrlResponse {
   expires_in: number;
 }
 
+export interface MediaUrlResponse {
+  download_url?: string | null;
+  url?: string | null;
+}
+
 type PaginatedThreadsResponse = {
   count: number;
   next?: string | null;
@@ -181,51 +186,107 @@ export async function getMultipartPartUrl(
 export async function completeMultipartUpload(
   mediaId: string,
   uploadId: string,
-  etag: string
+  parts: Array<{ part_number: number; etag: string }>
 ): Promise<void> {
   await request(
     'POST',
     `/api/media/${mediaId}/multipart/complete`,
     {
       upload_id: uploadId,
-      parts: [{ part_number: 1, etag }],
+      parts,
     }
   );
 }
 
+export async function abortMultipartUpload(
+  mediaId: string,
+  uploadId: string
+): Promise<void> {
+  await request(
+    'POST',
+    `/api/media/${mediaId}/multipart/abort`,
+    {
+      upload_id: uploadId,
+    }
+  );
+}
+
+export async function getMediaDownloadUrl(mediaId: string): Promise<string | null> {
+  const response = await request<MediaUrlResponse | { data?: MediaUrlResponse }>(
+    'GET',
+    `/api/media/${mediaId}/url`
+  );
+  const wrapped = response as { data?: MediaUrlResponse };
+  const data = wrapped.data ?? (response as MediaUrlResponse);
+  return data.download_url ?? data.url ?? null;
+}
+
 export async function uploadChatAttachment(file: File): Promise<string> {
   const init = await initMultipartUpload(file);
-  const part = await getMultipartPartUrl(init.id, init.upload_id, 1);
-  const response = await fetch(part.presigned_url, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-    },
-    body: file,
-  });
+  const chunkSize = 5 * 1024 * 1024;
+  const parts: Array<{ part_number: number; etag: string }> = [];
 
-  if (!response.ok) {
-    throw new Error('Failed to upload attachment.');
+  try {
+    const totalParts = Math.max(1, Math.ceil(file.size / chunkSize));
+
+    for (let index = 0; index < totalParts; index += 1) {
+      const partNumber = index + 1;
+      const part = await getMultipartPartUrl(init.id, init.upload_id, partNumber);
+      const start = index * chunkSize;
+      const end = Math.min(start + chunkSize, file.size);
+      const body = file.slice(start, end);
+
+      const response = await fetch(part.presigned_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+        },
+        body,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload attachment.');
+      }
+
+      const etag = (response.headers.get('etag') ?? '').replace(/^"+|"+$/g, '');
+      if (!etag) {
+        throw new Error('Upload completed but attachment verification failed.');
+      }
+
+      parts.push({ part_number: partNumber, etag });
+    }
+
+    await completeMultipartUpload(init.id, init.upload_id, parts);
+    return init.id;
+  } catch (error) {
+    try {
+      await abortMultipartUpload(init.id, init.upload_id);
+    } catch {
+      // Best-effort cleanup; preserve the original upload failure.
+    }
+    throw error;
   }
-
-  const etag = (response.headers.get('etag') ?? '').replace(/^"+|"+$/g, '');
-  if (!etag) {
-    throw new Error('Upload completed but attachment verification failed.');
-  }
-
-  await completeMultipartUpload(init.id, init.upload_id, etag);
-  return init.id;
 }
 
 export async function getMediaFile(mediaId: string): Promise<MediaFile> {
   const response = await request<any>('GET', `/api/media/${mediaId}`);
   const data = response?.data ?? response;
+  let downloadUrl = data.download_url ?? null;
+
+  if (!downloadUrl) {
+    try {
+      downloadUrl = await getMediaDownloadUrl(mediaId);
+    } catch {
+      downloadUrl = null;
+    }
+  }
+
   return {
     id: data.id,
     file_name: data.file_name,
     content_type: data.content_type,
     size: data.size ?? null,
-    download_url: data.download_url ?? null,
+    download_url: downloadUrl,
   };
 }
 
