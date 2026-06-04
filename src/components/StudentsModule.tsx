@@ -25,10 +25,10 @@ import {
   createStudentBehaviourLogEntry,
   getStudentsBySectionId,
   getStudentBehaviourLog,
-  triggerStudentInsightDemo,
+  triggerStudentInsight,
   type BehaviourLogEntry,
   type CreateBehaviourLogEntryRequest,
-  type StudentInsightDemoTriggerResponse,
+  type StudentInsightTriggerResponse,
 } from "../services/studentsService";
 import { getAttendanceSummary, type AttendanceSummary } from "../services/attendanceService";
 import { getAssessmentResults, type AssessmentResult } from "../services/assessmentResultsService";
@@ -242,11 +242,6 @@ const StudentsModule = ({
   const [studentResults, setStudentResults] = useState<AssessmentResult[]>([]);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
   const [insightTriggerState, setInsightTriggerState] = useState<{
-  const [behaviourLog, setBehaviourLog] = useState<BehaviourLogEntry[]>([]);
-  const [isBehaviourLoading, setIsBehaviourLoading] = useState(false);
-  const [behaviourError, setBehaviourError] = useState<string | null>(null);
-  const [isSavingBehaviour, setIsSavingBehaviour] = useState(false);
-  const [demoTriggerState, setDemoTriggerState] = useState<{
     status: "idle" | "loading" | "success" | "error";
     result: StudentInsightTriggerResponse | null;
     error: string | null;
@@ -255,6 +250,10 @@ const StudentsModule = ({
     result: null,
     error: null,
   });
+  const [behaviourLog, setBehaviourLog] = useState<BehaviourLogEntry[]>([]);
+  const [isBehaviourLoading, setIsBehaviourLoading] = useState(false);
+  const [behaviourError, setBehaviourError] = useState<string | null>(null);
+  const [isSavingBehaviour, setIsSavingBehaviour] = useState(false);
 
   // Load attendance, academics, and parent links when a student is selected
   useEffect(() => {
@@ -263,13 +262,12 @@ const StudentsModule = ({
       setStudentResults([]);
       setParentLinks([]);
       setInsightTriggerState({
-      setBehaviourLog([]);
-      setBehaviourError(null);
-      setDemoTriggerState({
         status: "idle",
         result: null,
         error: null,
       });
+      setBehaviourLog([]);
+      setBehaviourError(null);
       return;
     }
     const acYearId = activeSection?.academicYearId;
@@ -402,7 +400,6 @@ const StudentsModule = ({
     setTimeout(() => setSelectedStudent(null), 300); // Wait for transition
   };
 
-  const runInsightTrigger = async () => {
   const addBehaviourEntry = async (payload: CreateBehaviourLogEntryRequest) => {
     if (!selectedStudent) {
       return false;
@@ -424,7 +421,7 @@ const StudentsModule = ({
     }
   };
 
-  const runInsightDemo = async () => {
+  const runInsightTrigger = async () => {
     if (!selectedStudent) {
       return;
     }
