@@ -5,21 +5,13 @@ import {
   Calendar, 
   Heart, 
   AlertCircle, 
-  ChevronLeft, 
-  ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   CheckCircle,
-  Clock,
-  MessageSquare,
-  Users
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useSharedActivities } from '../sharedStore';
 import { getSectionAnalytics, SECTION_DATA, type SectionAnalytics } from '../services/analyticsService';
 
-const SECTIONS = Object.keys(SECTION_DATA);
+const DEFAULT_SECTION_NAME = "Grade 7 — Section A";
 
 const ACTIVITY_SUBJECT_MAP: Record<string, string> = {
   "Chapter 3 HW": "Mathematics",
@@ -55,21 +47,34 @@ const SummaryCard = ({ label, value, subtitle, color, icon: Icon }: { label: str
 const AnalyticsModule = ({ globalGrade, globalSection, activeSection }: { globalGrade?: string; globalSection?: string; activeSection?: any }) => {
   const { activities } = useSharedActivities(); // satisfying component import requirement
   
-  const [selectedSection, setSelectedSection] = useState<string>("Grade 7 — Section A");
+  const [selectedSection, setSelectedSection] = useState<string>(
+    activeSection?.sectionName || globalSection || DEFAULT_SECTION_NAME
+  );
   const [selectedSubject, setSelectedSubject] = useState<string>("All Subjects");
   const [trendView, setTrendView] = useState<'month' | 'term'>('month');
 
   // Initialise currentSectionData from the default section
   const [currentSectionData, setCurrentSectionData] = useState<SectionAnalytics>(
-    SECTION_DATA["Grade 7 — Section A"]
+    SECTION_DATA[DEFAULT_SECTION_NAME]
   );
+
+  useEffect(() => {
+    const nextSection = activeSection?.sectionName || globalSection;
+    if (nextSection && nextSection !== selectedSection) {
+      setSelectedSection(nextSection);
+      setSelectedSubject("All Subjects");
+    }
+  }, [activeSection?.sectionName, globalSection, selectedSection]);
 
   // Fetch section data whenever selectedSection changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await getSectionAnalytics(selectedSection);
+        const data = await getSectionAnalytics({
+          sectionId: activeSection?.sectionId,
+          sectionName: selectedSection,
+        });
         if (!cancelled && data !== null) {
           setCurrentSectionData(data);
         }
@@ -79,17 +84,11 @@ const AnalyticsModule = ({ globalGrade, globalSection, activeSection }: { global
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSection]);
+  }, [activeSection?.sectionId, selectedSection]);
 
   const uniqueSubjects = useMemo(() => {
     return currentSectionData.subjectAvgs.map(s => s.subject);
   }, [currentSectionData]);
-
-  // Handles dropdown triggers safely
-  const handleSectionChange = (section: string) => {
-    setSelectedSection(section);
-    setSelectedSubject("All Subjects");
-  };
 
   // Section 1 Computations
   const sectionAvgText = useMemo(() => {
@@ -248,6 +247,33 @@ const AnalyticsModule = ({ globalGrade, globalSection, activeSection }: { global
       transition={{ duration: 0.22 }}
       className="flex-1 space-y-8 pb-10"
     >
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Analytics Source</p>
+          <h2 className="mt-2 text-xl font-black text-slate-800">{selectedSection}</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {globalGrade ? `${globalGrade} analytics summary` : 'Section analytics summary'}
+          </p>
+        </div>
+
+        <div className="min-w-[220px]">
+          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Subject filter
+          </label>
+          <select
+            value={selectedSubject}
+            onChange={(event) => setSelectedSubject(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#185FA5]"
+          >
+            <option value="All Subjects">All Subjects</option>
+            {uniqueSubjects.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
 
       {/* SECTION 1 - METRIC CARDS */}
