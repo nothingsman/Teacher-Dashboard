@@ -91,9 +91,6 @@ import type {
 } from "../services";
 import SettingsModal from "../components/SettingsModal";
 import ProfileModal from "../components/ProfileModal";
-import ScheduleModule, {
-  OverviewScheduleWidget,
-} from "../components/ScheduleModule";
 
 // --- Sub-components ---
 
@@ -1960,14 +1957,6 @@ export default function App() {
                 </aside>
               </div>
 
-              {/* Entire School Schedule PDF Widget - Taking full parent container horizontal width */}
-              <div className="w-full">
-                <OverviewScheduleWidget
-                  onOpenSchedule={() => setActiveTab("Schedule")}
-                  currentGrade={globalGrade}
-                  currentSection={globalSection}
-                />
-              </div>
             </div>
           )}
 
@@ -2796,8 +2785,6 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === "Schedule" && <ScheduleModule />}
-
           {![
             "Overview",
             "Attendance",
@@ -2808,7 +2795,6 @@ export default function App() {
             "Analytics",
             "Homeworks",
             "Messages",
-            "Schedule",
           ].includes(activeTab) && (
             <div className="flex-1 flex flex-col items-center justify-center bg-white border border-slate-100 rounded-3xl p-12 text-center shadow-sm">
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-6 font-mono text-4xl">
