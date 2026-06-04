@@ -3,17 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
-  Check,
-  CheckCheck,
-  ChevronDown,
   ChevronLeft,
   Loader2,
   Paperclip,
   Plus,
   Search,
   User,
-  Wifi,
-  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -114,23 +109,19 @@ const MessagesModule = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const threadsRef = useRef<Thread[]>(threads);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdsRef = useRef<Set<string>>(new Set());
   const tempIdCounterRef = useRef(0);
   const pendingStatusRef = useRef<Map<string, 'sending' | 'sent'>>(new Map());
   const pendingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const activeThreadIdRef = useRef<string | null>(null);
-  const [showScrollDown, setShowScrollDown] = useState(false);
 
   const [internalThreadId, setInternalThreadId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [composerText, setComposerText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
-  const [socketState, setSocketState] = useState<
-    "idle" | "connecting" | "connected" | "reconnecting" | "disconnected"
-  >("idle");
   const [attachmentMeta, setAttachmentMeta] = useState<Record<string, MediaFile>>({});
 
   const activeThreadId = externalThreadId || internalThreadId || threads[0]?.id || null;
@@ -235,7 +226,6 @@ const MessagesModule = ({
       socketRef.current = null;
     }
     if (!activeThreadId) {
-      setSocketState("idle");
       return;
     }
 
@@ -245,12 +235,10 @@ const MessagesModule = ({
 
     const connect = async () => {
       if (disposed) return;
-      setSocketState(reconnectAttempts === 0 ? "connecting" : "reconnecting");
       const token = await ensureAccessToken(shouldForceRefresh);
       shouldForceRefresh = false;
       if (disposed) return;
       if (!token) {
-        setSocketState("disconnected");
         return;
       }
 
@@ -259,7 +247,6 @@ const MessagesModule = ({
 
       socket.onopen = () => {
         reconnectAttempts = 0;
-        setSocketState("connected");
       };
 
       socket.onmessage = (event) => {
@@ -324,7 +311,6 @@ const MessagesModule = ({
 
       socket.onclose = (event) => {
         if (disposed) return;
-        setSocketState("disconnected");
         shouldForceRefresh = event.code === 4403;
         reconnectAttempts += 1;
         const delay = Math.min(1000 * 2 ** (reconnectAttempts - 1), 10000);
@@ -332,11 +318,7 @@ const MessagesModule = ({
       };
     };
 
-    connect().catch(() => {
-      if (!disposed) {
-        setSocketState("disconnected");
-      }
-    });
+    connect().catch(() => undefined);
 
     return () => {
       disposed = true;
@@ -362,25 +344,15 @@ const MessagesModule = ({
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  const handleScroll = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    setShowScrollDown(distanceFromBottom > 200);
-  }, []);
-
   useEffect(() => {
     if (activeThreadIdRef.current !== activeThreadId) {
       activeThreadIdRef.current = activeThreadId;
-      setShowScrollDown(false);
       scrollToBottom(false);
       return;
     }
 
-    if (!showScrollDown) {
-      scrollToBottom(false);
-    }
-  }, [activeThreadId, activeThread?.messages.length, showScrollDown, scrollToBottom]);
+    scrollToBottom(false);
+  }, [activeThreadId, activeThread?.messages.length, scrollToBottom]);
 
   const handleThreadSelect = (id: string) => {
     setInternalThreadId(id);
@@ -400,11 +372,14 @@ const MessagesModule = ({
 
     let attachmentId: string | undefined;
     try {
+      setIsUploadingAttachment(Boolean(selectedFile));
       attachmentId = selectedFile ? await uploadChatAttachment(selectedFile) : undefined;
     } catch {
       setSendError("Failed to upload attachment.");
+      setIsUploadingAttachment(false);
       return;
     }
+    setIsUploadingAttachment(false);
 
     const tempId = `pending_${Date.now()}_${tempIdCounterRef.current++}`;
     const optimistic: ThreadMessage = {
@@ -614,13 +589,9 @@ const MessagesModule = ({
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-slate-50 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-500">
-                {socketState === "connected" ? <Wifi size={12} className="sm:w-[14px]" /> : <WifiOff size={12} className="sm:w-[14px]" />}
-                <span className="hidden sm:inline">{socketState === "connected" ? "Live" : socketState === "connecting" || socketState === "reconnecting" ? "Connecting" : "Offline"}</span>
-              </div>
             </div>
 
-            <div ref={messagesContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-5">
+            <div className="relative min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-5">
               {activeThread.messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="max-w-md text-center">
@@ -666,22 +637,46 @@ const MessagesModule = ({
                             <div className={`rounded-2xl px-4 py-2.5 shadow-sm ${isOwn ? "bg-gradient-to-br from-[#1A237E] to-[#283593] text-white" : "bg-white text-slate-900"}`}>
                               {message.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>}
                               {attachment && (
-                                <a
-                                  href={attachment.download_url ?? "#"}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className={`mt-2 flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${isOwn ? "border-white/20 bg-white/10 text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
-                                >
-                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isOwn ? "bg-white/15" : "bg-white"}`}>
-                                    <Paperclip size={14} />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="truncate font-semibold">{attachment.file_name}</p>
-                                    <p className={`mt-0.5 text-xs ${isOwn ? "text-white/70" : "text-slate-500"}`}>
-                                      {attachment.content_type}
-                                    </p>
-                                  </div>
-                                </a>
+                                <>
+                                  {attachment.download_url && attachment.content_type.startsWith("image/") ? (
+                                    <a
+                                      href={attachment.download_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="mt-2 block"
+                                    >
+                                      <img
+                                        src={attachment.download_url}
+                                        alt={attachment.file_name}
+                                        className="max-h-64 w-full rounded-xl object-cover"
+                                      />
+                                    </a>
+                                  ) : attachment.download_url ? (
+                                    <a
+                                      href={attachment.download_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`mt-2 flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${isOwn ? "border-white/20 bg-white/10 text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
+                                    >
+                                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isOwn ? "bg-white/15" : "bg-white"}`}>
+                                        <Paperclip size={14} />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="truncate font-semibold">{attachment.file_name}</p>
+                                        <p className={`mt-0.5 text-xs ${isOwn ? "text-white/70" : "text-slate-500"}`}>
+                                          {attachment.content_type}
+                                        </p>
+                                      </div>
+                                    </a>
+                                  ) : (
+                                    <div className={`mt-2 rounded-xl border px-3 py-2 text-sm ${isOwn ? "border-white/20 bg-white/10 text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}>
+                                      <p className="font-semibold">{attachment.file_name}</p>
+                                      <p className={`mt-0.5 text-xs ${isOwn ? "text-white/70" : "text-slate-500"}`}>
+                                        Download link unavailable
+                                      </p>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                             <div className={`mt-2 flex items-center gap-1 px-1 text-[10px] ${isOwn ? "justify-end" : "justify-start"} text-slate-400`}>
@@ -709,16 +704,6 @@ const MessagesModule = ({
                 </div>
               )}
 
-              {showScrollDown && activeThread.messages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => scrollToBottom(true)}
-                  className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-lg transition hover:bg-slate-50"
-                >
-                  <ChevronDown size={14} />
-                  New messages
-                </button>
-              )}
             </div>
 
             <div className="border-t border-slate-100 bg-white px-2 sm:px-4 py-2 sm:py-3">
@@ -730,16 +715,20 @@ const MessagesModule = ({
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-800">{selectedFile.name}</p>
-                      <p className="text-[10px] text-slate-500">Attachment ready</p>
+                      <p className="text-[10px] text-slate-500">
+                        {isUploadingAttachment ? "Uploading attachment..." : "Attachment ready"}
+                      </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
+                      if (isUploadingAttachment) return;
                       setSelectedFile(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="rounded-full p-1 text-slate-400 transition hover:bg-slate-200"
+                    disabled={isUploadingAttachment}
+                    className="rounded-full p-1 text-slate-400 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <X size={14} />
                   </button>
@@ -762,7 +751,8 @@ const MessagesModule = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
+                  disabled={isUploadingAttachment}
+                  className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Paperclip size={14} className="sm:w-4" />
                 </button>
@@ -771,7 +761,7 @@ const MessagesModule = ({
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (event.key === "Enter" && !event.shiftKey && !isUploadingAttachment) {
                       event.preventDefault();
                       handleSend();
                     }
@@ -782,10 +772,14 @@ const MessagesModule = ({
                 <button
                   type="button"
                   onClick={handleSend}
-                  disabled={!composerText.trim() && !selectedFile}
+                  disabled={isUploadingAttachment || (!composerText.trim() && !selectedFile)}
                   className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-[#1A237E] text-white transition hover:bg-blue-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 shadow-md shadow-[#1A237E]/20"
                 >
-                  <ArrowUp size={14} className="sm:w-4" strokeWidth={2.5} />
+                  {isUploadingAttachment ? (
+                    <Loader2 size={14} className="animate-spin sm:w-4" strokeWidth={2.5} />
+                  ) : (
+                    <ArrowUp size={14} className="sm:w-4" strokeWidth={2.5} />
+                  )}
                 </button>
               </div>
             </div>

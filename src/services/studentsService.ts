@@ -91,6 +91,39 @@ export interface StudentListResponse {
   results: StudentApi[];
 }
 
+export interface StudentInsightDemoTriggerResponse {
+  created: boolean;
+  reused_existing?: boolean;
+  insight_id?: string;
+  category?: string;
+  risk_band?: string;
+  delivery_status?: string;
+  reason_code?: string;
+  message: string;
+  source_event_type?: string;
+  source_model?: string;
+  source_id?: string;
+}
+
+export interface BehaviourLogEntry {
+  id: string;
+  type: "incident" | "remark";
+  title: string;
+  description: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | string;
+  teacherName: string;
+  source: string;
+  occurredAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateBehaviourLogEntryRequest {
+  type: "incident" | "remark";
+  title: string;
+  description: string;
+  severity?: "LOW" | "MEDIUM" | "HIGH";
+}
+
 // --- Mock Data ---
 
 let mockStore: Student[] = [
@@ -272,6 +305,33 @@ let mockStore: Student[] = [
   },
 ];
 
+let mockBehaviourLogStore: Record<string, BehaviourLogEntry[]> = {
+  "STU-00421": [
+    {
+      id: "behaviour-1",
+      type: "incident",
+      title: "Late assignment submission",
+      description: "Submitted work after the deadline.",
+      severity: "MEDIUM",
+      teacherName: "Abebe T.",
+      source: "Teacher Incident",
+      occurredAt: "2026-05-12T08:00:00Z",
+      createdAt: "2026-05-12T08:00:00Z",
+    },
+    {
+      id: "behaviour-2",
+      type: "remark",
+      title: "Positive participation",
+      description: "Actively participated and supported peers in class.",
+      severity: "LOW",
+      teacherName: "Sarah J.",
+      source: "Teacher Remark",
+      occurredAt: "2026-05-15T08:00:00Z",
+      createdAt: "2026-05-15T08:00:00Z",
+    },
+  ],
+};
+
 // --- Mappers ---
 
 /**
@@ -427,5 +487,74 @@ export async function updateStudent(
     "PATCH",
     `/api/students/${encodeURIComponent(id)}/`,
     changes,
+  );
+}
+
+export async function triggerStudentInsightDemo(
+  studentId: string,
+): Promise<StudentInsightDemoTriggerResponse> {
+  if (IS_MOCK) {
+    return {
+      created: true,
+      reused_existing: false,
+      insight_id: `demo-${studentId}`,
+      category: "ACADEMICS",
+      risk_band: "LOW",
+      delivery_status: "DELIVERED",
+      message:
+        "Insight generated and delivered through the parent notification flow.",
+      source_event_type: "ASSESSMENT_RESULT",
+      source_model: "assessments.AssessmentResult",
+      source_id: `mock-source-${studentId}`,
+    };
+  }
+
+  return request<StudentInsightDemoTriggerResponse>(
+    "POST",
+    `/api/students/${encodeURIComponent(studentId)}/trigger-insight-demo/`,
+  );
+}
+
+export async function getStudentBehaviourLog(
+  studentId: string,
+): Promise<BehaviourLogEntry[]> {
+  if (IS_MOCK) {
+    return [...(mockBehaviourLogStore[studentId] ?? [])];
+  }
+
+  return request<BehaviourLogEntry[]>(
+    "GET",
+    `/api/students/${encodeURIComponent(studentId)}/behaviour-log/`,
+  );
+}
+
+export async function createStudentBehaviourLogEntry(
+  studentId: string,
+  payload: CreateBehaviourLogEntryRequest,
+): Promise<BehaviourLogEntry> {
+  if (IS_MOCK) {
+    const entry: BehaviourLogEntry = {
+      id: `mock-${Date.now()}`,
+      type: payload.type,
+      title: payload.title,
+      description: payload.description,
+      severity:
+        payload.severity ?? (payload.type === "incident" ? "MEDIUM" : "LOW"),
+      teacherName: "Teacher",
+      source: payload.type === "incident" ? "Teacher Incident" : "Teacher Remark",
+      occurredAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    mockBehaviourLogStore = {
+      ...mockBehaviourLogStore,
+      [studentId]: [entry, ...(mockBehaviourLogStore[studentId] ?? [])],
+    };
+    return entry;
+  }
+
+  return request<BehaviourLogEntry>(
+    "POST",
+    `/api/students/${encodeURIComponent(studentId)}/behaviour-log/`,
+    payload,
   );
 }

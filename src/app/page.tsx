@@ -108,31 +108,40 @@ const SidebarItem = ({
   isActive?: boolean;
   count?: number;
   onClick: () => void;
-}) => (
-  <motion.button
-    whileHover={{ x: 4 }}
-    onClick={onClick}
-    className={`w-full flex items-center justify-between px-3 sm:px-4 min-h-[44px] py-2 sm:py-3 rounded-lg transition-colors duration-200 ${
-      isActive
-        ? "bg-[#1A237E] text-white shadow-lg shadow-blue-900/20"
-        : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-    }`}
-  >
-    <div className="flex items-center gap-3">
-      <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-      <span className="text-sm font-medium tracking-tight">{label}</span>
-    </div>
-    {count !== undefined && (
-      <span
-        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-          isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
-        }`}
-      >
-        {count < 10 ? `0${count}` : count}
-      </span>
-    )}
-  </motion.button>
-);
+}) => {
+  const visibleCount = typeof count === "number" && count > 0 ? count : null;
+  const highlightUnread = label === "Messages" || label === "Notifications";
+
+  return (
+    <motion.button
+      whileHover={{ x: 4 }}
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-3 sm:px-4 min-h-[44px] py-2 sm:py-3 rounded-lg transition-colors duration-200 ${
+        isActive
+          ? "bg-[#1A237E] text-white shadow-lg shadow-blue-900/20"
+          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+        <span className="text-sm font-medium tracking-tight">{label}</span>
+      </div>
+      {visibleCount !== null && (
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+            highlightUnread
+              ? "bg-blue-600 text-white"
+              : isActive
+                ? "bg-white/20 text-white"
+                : "bg-slate-200 text-slate-600"
+          }`}
+        >
+          {visibleCount}
+        </span>
+      )}
+    </motion.button>
+  );
+};
 
 const MetricCard = ({
   label,

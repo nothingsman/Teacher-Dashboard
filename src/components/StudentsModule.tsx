@@ -8,23 +8,28 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Search,
-  Filter,
-  Plus,
   CheckCircle,
   Minus,
   Eye,
   Edit2,
   X,
-  Phone,
-  Mail,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  Send,
-  ChevronDown,
+  Phone,
+  Mail,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getStudentsBySectionId } from "../services/studentsService";
+import {
+  createStudentBehaviourLogEntry,
+  getStudentsBySectionId,
+  getStudentBehaviourLog,
+  triggerStudentInsightDemo,
+  type BehaviourLogEntry,
+  type CreateBehaviourLogEntryRequest,
+  type StudentInsightDemoTriggerResponse,
+} from "../services/studentsService";
 import { getAttendanceSummary, type AttendanceSummary } from "../services/attendanceService";
 import { getAssessmentResults, type AssessmentResult } from "../services/assessmentResultsService";
 import { getParentLinks, type ParentLink } from "../services/parentLinksService";
@@ -236,6 +241,19 @@ const StudentsModule = ({
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null);
   const [studentResults, setStudentResults] = useState<AssessmentResult[]>([]);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
+  const [behaviourLog, setBehaviourLog] = useState<BehaviourLogEntry[]>([]);
+  const [isBehaviourLoading, setIsBehaviourLoading] = useState(false);
+  const [behaviourError, setBehaviourError] = useState<string | null>(null);
+  const [isSavingBehaviour, setIsSavingBehaviour] = useState(false);
+  const [demoTriggerState, setDemoTriggerState] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    result: StudentInsightDemoTriggerResponse | null;
+    error: string | null;
+  }>({
+    status: "idle",
+    result: null,
+    error: null,
+  });
 
   // Load attendance, academics, and parent links when a student is selected
   useEffect(() => {
@@ -243,6 +261,13 @@ const StudentsModule = ({
       setAttendanceSummary(null);
       setStudentResults([]);
       setParentLinks([]);
+      setBehaviourLog([]);
+      setBehaviourError(null);
+      setDemoTriggerState({
+        status: "idle",
+        result: null,
+        error: null,
+      });
       return;
     }
     const acYearId = activeSection?.academicYearId;
@@ -251,6 +276,17 @@ const StudentsModule = ({
       setStudentResults(res.results ?? []),
     );
     getParentLinks(selectedStudent.id).then(setParentLinks);
+    setIsBehaviourLoading(true);
+    setBehaviourError(null);
+    getStudentBehaviourLog(selectedStudent.id)
+      .then(setBehaviourLog)
+      .catch((error) => {
+        setBehaviourError(
+          error instanceof Error ? error.message : "Failed to load behaviour log.",
+        );
+        setBehaviourLog([]);
+      })
+      .finally(() => setIsBehaviourLoading(false));
   }, [selectedStudent?.id, activeSection?.academicYearId]);
 
   const primaryParent = parentLinks.find((p) => p.is_primary_contact) ?? parentLinks[0] ?? null;
@@ -287,64 +323,63 @@ const StudentsModule = ({
   const [editParentEmail, setEditParentEmail] = useState("");
   const [editParentLinked, setEditParentLinked] = useState(false);
 
-  // Behaviour incidents state
-  const [incidents, setIncidents] = useState([
-    {
-      id: "1",
-      date: "May 12, 2026",
-      type: "Late Assignment Submission",
-      severity: "Warning",
-      class: "bg-amber-50 text-amber-600 border-amber-100",
-      reporter: "Abebe T. (Math)",
-    },
-    {
-      id: "2",
-      date: "May 08, 2026",
-      type: "Disruptive Classroom Behaviour",
-      severity: "Serious",
-      class: "bg-rose-50 text-rose-600 border-rose-100",
-      reporter: "Tsige K. (Physics)",
-    },
-    {
-      id: "3",
-      date: "May 02, 2026",
-      type: "Incomplete Homework",
-      severity: "Warning",
-      class: "bg-amber-50 text-amber-600 border-amber-100",
-      reporter: "Kebede M. (History)",
-    },
-  ]);
   const [isAddIncidentOpen, setIsAddIncidentOpen] = useState(false);
-  const [newIncidentType, setNewIncidentType] = useState("");
+  const [newIncidentTitle, setNewIncidentTitle] = useState("");
   const [newIncidentSeverity, setNewIncidentSeverity] = useState<
     "Good Day" | "Warning" | "Serious"
   >("Warning");
-  const [newIncidentReporter, setNewIncidentReporter] = useState("");
+  const [newIncidentDescription, setNewIncidentDescription] = useState("");
 
-  // Remarks state
-  const [remarks, setRemarks] = useState([
-    {
-      name: "Abebe Tadese",
-      subject: "Mathematics",
-      date: "May 15",
-      text: "Liya is highly intelligent but needs to remain focused during independent exercises.",
-    },
-    {
-      name: "Sarah J.",
-      subject: "English",
-      date: "May 10",
-      text: "Excellent analytical reading skills. Actively participates and assists peers.",
-    },
-  ]);
   const [isAddRemarkOpen, setIsAddRemarkOpen] = useState(false);
   const [newRemarkText, setNewRemarkText] = useState("");
-  const [newRemarkSubject, setNewRemarkSubject] = useState("");
-  const [newRemarkName, setNewRemarkName] = useState("");
+  const [newRemarkTitle, setNewRemarkTitle] = useState("");
 
-  const warningCount = incidents.filter((i) => i.severity === "Warning").length;
-  const seriousCount = incidents.filter((i) => i.severity === "Serious").length;
+  const incidents = useMemo(
+    () => behaviourLog.filter((entry) => entry.type === "incident"),
+    [behaviourLog],
+  );
+  const remarks = useMemo(
+    () => behaviourLog.filter((entry) => entry.type === "remark"),
+    [behaviourLog],
+  );
+
+  const warningCount = incidents.filter((entry) => entry.severity === "MEDIUM").length;
+  const seriousCount = incidents.filter((entry) => entry.severity === "HIGH").length;
   const goodDaysCount =
-    24 + incidents.filter((i) => i.severity === "Good Day").length;
+    24 + incidents.filter((entry) => entry.severity === "LOW").length;
+
+  const formatBehaviourDate = (value: string | null) => {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    }).format(new Date(value));
+  };
+
+  const getSeverityClasses = (severity: string) => {
+    if (severity === "HIGH") {
+      return "bg-rose-50 text-rose-600 border-rose-100";
+    }
+    if (severity === "MEDIUM") {
+      return "bg-amber-50 text-amber-600 border-amber-100";
+    }
+    return "bg-emerald-50 text-emerald-600 border-emerald-100";
+  };
+
+  const getSeverityLabel = (severity: string) => {
+    if (severity === "HIGH") return "Serious";
+    if (severity === "MEDIUM") return "Warning";
+    return "Good Day";
+  };
+
+  const mapIncidentSeverity = (
+    severity: "Good Day" | "Warning" | "Serious",
+  ): CreateBehaviourLogEntryRequest["severity"] => {
+    if (severity === "Serious") return "HIGH";
+    if (severity === "Warning") return "MEDIUM";
+    return "LOW";
+  };
 
   // Calculate student statistics from actual data
   const totalStudents = students.length;
@@ -363,6 +398,58 @@ const StudentsModule = ({
   const closeSheet = () => {
     setIsSheetOpen(false);
     setTimeout(() => setSelectedStudent(null), 300); // Wait for transition
+  };
+
+  const addBehaviourEntry = async (payload: CreateBehaviourLogEntryRequest) => {
+    if (!selectedStudent) {
+      return false;
+    }
+
+    setIsSavingBehaviour(true);
+    setBehaviourError(null);
+    try {
+      const created = await createStudentBehaviourLogEntry(selectedStudent.id, payload);
+      setBehaviourLog((current) => [created, ...current]);
+      return true;
+    } catch (error) {
+      setBehaviourError(
+        error instanceof Error ? error.message : "Failed to save behaviour entry.",
+      );
+      return false;
+    } finally {
+      setIsSavingBehaviour(false);
+    }
+  };
+
+  const runInsightDemo = async () => {
+    if (!selectedStudent) {
+      return;
+    }
+
+    setDemoTriggerState({
+      status: "loading",
+      result: null,
+      error: null,
+    });
+
+    try {
+      const result = await triggerStudentInsightDemo(selectedStudent.id);
+      setDemoTriggerState({
+        status: "success",
+        result,
+        error: null,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to trigger the student insight demo.";
+      setDemoTriggerState({
+        status: "error",
+        result: null,
+        error: message,
+      });
+    }
   };
 
   const filteredStudents = useMemo(() => {
@@ -1006,9 +1093,9 @@ const StudentsModule = ({
                         </h4>
                         <button
                           onClick={() => {
-                            setNewIncidentType("");
+                            setNewIncidentTitle("");
                             setNewIncidentSeverity("Warning");
-                            setNewIncidentReporter("");
+                            setNewIncidentDescription("");
                             setIsAddIncidentOpen(true);
                           }}
                           className="px-3 py-1 bg-[#1A237E]/10 hover:bg-[#1A237E]/20 text-[#1A237E] text-[9.5px] font-black uppercase tracking-widest rounded-lg transition-colors cursor-pointer"
@@ -1017,25 +1104,46 @@ const StudentsModule = ({
                         </button>
                       </div>
 
+                      {behaviourError && (
+                        <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-[11px] font-semibold text-rose-600">
+                          {behaviourError}
+                        </div>
+                      )}
+
                       {/* Incident List */}
                       <div className="space-y-3">
-                        {incidents.map((incident, index) => (
+                        {isBehaviourLoading && (
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                            Loading behaviour log...
+                          </div>
+                        )}
+                        {!isBehaviourLoading && incidents.length === 0 && (
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                            No incidents logged for this student yet.
+                          </div>
+                        )}
+                        {incidents.map((incident) => (
                           <div
-                            key={incident.id || index}
+                            key={incident.id}
                             className="p-4 bg-white border border-slate-100 rounded-xl shadow-xs flex items-center justify-between"
                           >
                             <div className="space-y-1">
                               <p className="text-xs font-bold text-slate-700 leading-snug">
-                                {incident.type}
+                                {incident.title}
                               </p>
                               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">
-                                By {incident.reporter} • {incident.date}
+                                By {incident.teacherName || "Teacher"} • {formatBehaviourDate(incident.occurredAt ?? incident.createdAt)}
                               </p>
+                              {incident.description && (
+                                <p className="text-[11px] text-slate-500">
+                                  {incident.description}
+                                </p>
+                              )}
                             </div>
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border ${incident.class}`}
+                              className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border ${getSeverityClasses(incident.severity)}`}
                             >
-                              {incident.severity}
+                              {getSeverityLabel(incident.severity)}
                             </span>
                           </div>
                         ))}
@@ -1051,8 +1159,7 @@ const StudentsModule = ({
                         <button
                           onClick={() => {
                             setNewRemarkText("");
-                            setNewRemarkSubject("");
-                            setNewRemarkName("");
+                            setNewRemarkTitle("");
                             setIsAddRemarkOpen(true);
                           }}
                           className="px-3 py-1 bg-[#1A237E]/10 hover:bg-[#1A237E]/20 text-[#1A237E] text-[9.5px] font-black uppercase tracking-widest rounded-lg transition-colors cursor-pointer"
@@ -1061,26 +1168,36 @@ const StudentsModule = ({
                         </button>
                       </div>
                       <div className="space-y-3">
-                        {remarks.map((remark, index) => (
+                        {isBehaviourLoading && (
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                            Loading teacher remarks...
+                          </div>
+                        )}
+                        {!isBehaviourLoading && remarks.length === 0 && (
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                            No teacher remarks logged for this student yet.
+                          </div>
+                        )}
+                        {remarks.map((remark) => (
                           <div
-                            key={index}
+                            key={remark.id}
                             className="p-4 bg-slate-50 border border-slate-100 rounded-xl"
                           >
                             <div className="flex justify-between items-start mb-2">
                               <div>
                                 <h5 className="text-xs font-bold text-slate-800 leading-none">
-                                  {remark.name}
+                                  {remark.teacherName || "Teacher"}
                                 </h5>
                                 <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1 block">
-                                  {remark.subject}
+                                  {remark.title}
                                 </span>
                               </div>
                               <span className="text-[9px] font-mono text-slate-400">
-                                {remark.date}
+                                {formatBehaviourDate(remark.occurredAt ?? remark.createdAt)}
                               </span>
                             </div>
                             <p className="text-xs text-slate-600 italic">
-                              "{remark.text}"
+                              "{remark.description}"
                             </p>
                           </div>
                         ))}
@@ -1277,6 +1394,67 @@ const StudentsModule = ({
 
               {/* Action Buttons Footer */}
               <div className="p-8 border-t border-slate-50 bg-slate-50/50 space-y-3">
+                {demoTriggerState.status !== "idle" && (
+                  <div
+                    className={`rounded-2xl border px-4 py-3 ${
+                      demoTriggerState.status === "error"
+                        ? "border-rose-100 bg-rose-50"
+                        : demoTriggerState.result?.created
+                          ? "border-emerald-100 bg-emerald-50"
+                          : "border-amber-100 bg-amber-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl ${
+                          demoTriggerState.status === "error"
+                            ? "bg-rose-100 text-rose-600"
+                            : demoTriggerState.result?.created
+                              ? "bg-emerald-100 text-emerald-600"
+                              : "bg-amber-100 text-amber-600"
+                        }`}
+                      >
+                        <Sparkles size={16} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          Insight Demo
+                        </p>
+                        <p className="text-xs font-bold text-slate-800">
+                          {demoTriggerState.status === "loading"
+                            ? "Running the student insight pipeline..."
+                            : demoTriggerState.error
+                              ? demoTriggerState.error
+                              : demoTriggerState.result?.message}
+                        </p>
+                        {demoTriggerState.result?.created && (
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            {demoTriggerState.result.reused_existing
+                              ? "Existing insight reused"
+                              : `${demoTriggerState.result.category} • ${demoTriggerState.result.risk_band} • ${demoTriggerState.result.delivery_status}`}
+                          </p>
+                        )}
+                        {demoTriggerState.result?.created && (
+                          <p className="text-[10px] text-slate-500">
+                            Open the Parent Site notifications for this student&apos;s parent to show the delivered alert.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    void runInsightDemo();
+                  }}
+                  disabled={!selectedStudent || demoTriggerState.status === "loading"}
+                  className="w-full py-4 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles size={14} />
+                  {demoTriggerState.status === "loading"
+                    ? "Running Insight Demo..."
+                    : "Run Insight Demo"}
+                </button>
                 <button
                   onClick={() => {
                     if (selectedStudent) {
@@ -1332,13 +1510,13 @@ const StudentsModule = ({
             <div className="p-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.15em] block">
-                  Incident Description / Type
+                  Incident Title
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. Late Assignment Submission"
-                  value={newIncidentType}
-                  onChange={(e) => setNewIncidentType(e.target.value)}
+                  value={newIncidentTitle}
+                  onChange={(e) => setNewIncidentTitle(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1A237E]/15"
                 />
               </div>
@@ -1364,14 +1542,14 @@ const StudentsModule = ({
               </div>
               <div className="space-y-1.5">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.15em] block">
-                  Reported By (Teacher & Subject)
+                  Incident Details
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Abebe T. (Math)"
-                  value={newIncidentReporter}
-                  onChange={(e) => setNewIncidentReporter(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1A237E]/15"
+                <textarea
+                  placeholder="Add context for the parent behaviour feed..."
+                  value={newIncidentDescription}
+                  onChange={(e) => setNewIncidentDescription(e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1A237E]/15 resize-none"
                 />
               </div>
             </div>
@@ -1384,33 +1562,17 @@ const StudentsModule = ({
                 Cancel
               </button>
               <button
-                disabled={!newIncidentType || !newIncidentReporter}
-                onClick={() => {
-                  let badgeClass =
-                    "bg-[#1A237E]/5 text-[#1A237E] border-[#1A237E]/10";
-                  if (newIncidentSeverity === "Good Day") {
-                    badgeClass =
-                      "bg-emerald-50 text-emerald-600 border-emerald-100";
-                  } else if (newIncidentSeverity === "Warning") {
-                    badgeClass = "bg-amber-50 text-amber-600 border-amber-100";
-                  } else if (newIncidentSeverity === "Serious") {
-                    badgeClass = "bg-rose-50 text-rose-600 border-rose-100";
+                disabled={!newIncidentTitle || isSavingBehaviour}
+                onClick={async () => {
+                  const saved = await addBehaviourEntry({
+                    type: "incident",
+                    title: newIncidentTitle,
+                    description: newIncidentDescription,
+                    severity: mapIncidentSeverity(newIncidentSeverity),
+                  });
+                  if (saved) {
+                    setIsAddIncidentOpen(false);
                   }
-
-                  const added = {
-                    id: String(Date.now()),
-                    date: new Date().toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "2-digit",
-                      year: "numeric",
-                    }),
-                    type: newIncidentType,
-                    severity: newIncidentSeverity,
-                    class: badgeClass,
-                    reporter: newIncidentReporter,
-                  };
-                  setIncidents([added, ...incidents]);
-                  setIsAddIncidentOpen(false);
                 }}
                 className="flex-1 py-3 bg-[#1A237E] hover:bg-opacity-90 disabled:opacity-50 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-950/10 transition-colors cursor-pointer"
               >
@@ -1438,25 +1600,13 @@ const StudentsModule = ({
             <div className="p-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.15em] block">
-                  Your Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Abebe Tadese"
-                  value={newRemarkName}
-                  onChange={(e) => setNewRemarkName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1A237E]/15"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.15em] block">
-                  Subject / Department
+                  Remark Title / Subject
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. Mathematics"
-                  value={newRemarkSubject}
-                  onChange={(e) => setNewRemarkSubject(e.target.value)}
+                  value={newRemarkTitle}
+                  onChange={(e) => setNewRemarkTitle(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1A237E]/15"
                 />
               </div>
@@ -1482,19 +1632,16 @@ const StudentsModule = ({
                 Cancel
               </button>
               <button
-                disabled={!newRemarkText || !newRemarkSubject || !newRemarkName}
-                onClick={() => {
-                  const added = {
-                    name: newRemarkName,
-                    subject: newRemarkSubject,
-                    date: new Date().toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "2-digit",
-                    }),
-                    text: newRemarkText,
-                  };
-                  setRemarks([added, ...remarks]);
-                  setIsAddRemarkOpen(false);
+                disabled={!newRemarkText || !newRemarkTitle || isSavingBehaviour}
+                onClick={async () => {
+                  const saved = await addBehaviourEntry({
+                    type: "remark",
+                    title: newRemarkTitle,
+                    description: newRemarkText,
+                  });
+                  if (saved) {
+                    setIsAddRemarkOpen(false);
+                  }
                 }}
                 className="flex-1 py-3 bg-[#1A237E] hover:bg-opacity-90 disabled:opacity-50 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-950/10 transition-colors cursor-pointer"
               >
