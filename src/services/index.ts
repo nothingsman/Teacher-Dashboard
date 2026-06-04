@@ -7,7 +7,7 @@ export type {
   Student,
   StudentApi,
   StudentListResponse,
-  StudentInsightDemoTriggerResponse,
+  StudentInsightTriggerResponse,
 } from "./studentsService";
 export type { GradeRecord } from "./gradebookService";
 export type { SectionAnalytics, StudentAnalytics } from "./analyticsService";

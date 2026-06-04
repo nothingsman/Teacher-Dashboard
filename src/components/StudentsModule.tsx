@@ -23,8 +23,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import {
   getStudentsBySectionId,
-  triggerStudentInsightDemo,
-  type StudentInsightDemoTriggerResponse,
+  triggerStudentInsight,
+  type StudentInsightTriggerResponse,
 } from "../services/studentsService";
 import { getAttendanceSummary, type AttendanceSummary } from "../services/attendanceService";
 import { getAssessmentResults, type AssessmentResult } from "../services/assessmentResultsService";
@@ -237,9 +237,9 @@ const StudentsModule = ({
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null);
   const [studentResults, setStudentResults] = useState<AssessmentResult[]>([]);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
-  const [demoTriggerState, setDemoTriggerState] = useState<{
+  const [insightTriggerState, setInsightTriggerState] = useState<{
     status: "idle" | "loading" | "success" | "error";
-    result: StudentInsightDemoTriggerResponse | null;
+    result: StudentInsightTriggerResponse | null;
     error: string | null;
   }>({
     status: "idle",
@@ -253,7 +253,7 @@ const StudentsModule = ({
       setAttendanceSummary(null);
       setStudentResults([]);
       setParentLinks([]);
-      setDemoTriggerState({
+      setInsightTriggerState({
         status: "idle",
         result: null,
         error: null,
@@ -380,20 +380,20 @@ const StudentsModule = ({
     setTimeout(() => setSelectedStudent(null), 300); // Wait for transition
   };
 
-  const runInsightDemo = async () => {
+  const runInsightTrigger = async () => {
     if (!selectedStudent) {
       return;
     }
 
-    setDemoTriggerState({
+    setInsightTriggerState({
       status: "loading",
       result: null,
       error: null,
     });
 
     try {
-      const result = await triggerStudentInsightDemo(selectedStudent.id);
-      setDemoTriggerState({
+      const result = await triggerStudentInsight(selectedStudent.id);
+      setInsightTriggerState({
         status: "success",
         result,
         error: null,
@@ -402,8 +402,8 @@ const StudentsModule = ({
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to trigger the student insight demo.";
-      setDemoTriggerState({
+          : "Failed to generate the student insight.";
+      setInsightTriggerState({
         status: "error",
         result: null,
         error: message,
@@ -1323,12 +1323,12 @@ const StudentsModule = ({
 
               {/* Action Buttons Footer */}
               <div className="p-8 border-t border-slate-50 bg-slate-50/50 space-y-3">
-                {demoTriggerState.status !== "idle" && (
+                {insightTriggerState.status !== "idle" && (
                   <div
                     className={`rounded-2xl border px-4 py-3 ${
-                      demoTriggerState.status === "error"
+                      insightTriggerState.status === "error"
                         ? "border-rose-100 bg-rose-50"
-                        : demoTriggerState.result?.created
+                        : insightTriggerState.result?.created
                           ? "border-emerald-100 bg-emerald-50"
                           : "border-amber-100 bg-amber-50"
                     }`}
@@ -1336,9 +1336,9 @@ const StudentsModule = ({
                     <div className="flex items-start gap-3">
                       <div
                         className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl ${
-                          demoTriggerState.status === "error"
+                          insightTriggerState.status === "error"
                             ? "bg-rose-100 text-rose-600"
-                            : demoTriggerState.result?.created
+                            : insightTriggerState.result?.created
                               ? "bg-emerald-100 text-emerald-600"
                               : "bg-amber-100 text-amber-600"
                         }`}
@@ -1347,25 +1347,25 @@ const StudentsModule = ({
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                          Insight Demo
+                          Insight Status
                         </p>
                         <p className="text-xs font-bold text-slate-800">
-                          {demoTriggerState.status === "loading"
-                            ? "Running the student insight pipeline..."
-                            : demoTriggerState.error
-                              ? demoTriggerState.error
-                              : demoTriggerState.result?.message}
+                          {insightTriggerState.status === "loading"
+                            ? "Generating the student insight..."
+                            : insightTriggerState.error
+                              ? insightTriggerState.error
+                              : insightTriggerState.result?.message}
                         </p>
-                        {demoTriggerState.result?.created && (
+                        {insightTriggerState.result?.created && (
                           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                            {demoTriggerState.result.reused_existing
+                            {insightTriggerState.result.reused_existing
                               ? "Existing insight reused"
-                              : `${demoTriggerState.result.category} • ${demoTriggerState.result.risk_band} • ${demoTriggerState.result.delivery_status}`}
+                              : `${insightTriggerState.result.category} • ${insightTriggerState.result.risk_band} • ${insightTriggerState.result.delivery_status}`}
                           </p>
                         )}
-                        {demoTriggerState.result?.created && (
+                        {insightTriggerState.result?.created && (
                           <p className="text-[10px] text-slate-500">
-                            Open the Parent Site notifications for this student&apos;s parent to show the delivered alert.
+                            Open the Parent Site notifications for this student&apos;s parent to view the delivered insight.
                           </p>
                         )}
                       </div>
@@ -1374,15 +1374,15 @@ const StudentsModule = ({
                 )}
                 <button
                   onClick={() => {
-                    void runInsightDemo();
+                    void runInsightTrigger();
                   }}
-                  disabled={!selectedStudent || demoTriggerState.status === "loading"}
+                  disabled={!selectedStudent || insightTriggerState.status === "loading"}
                   className="w-full py-4 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Sparkles size={14} />
-                  {demoTriggerState.status === "loading"
-                    ? "Running Insight Demo..."
-                    : "Run Insight Demo"}
+                  {insightTriggerState.status === "loading"
+                    ? "Generating Insight..."
+                    : "Generate Insight"}
                 </button>
                 <button
                   onClick={() => {
