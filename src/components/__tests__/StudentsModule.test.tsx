@@ -5,6 +5,9 @@ import { createRoot, Root } from "react-dom/client";
 import StudentsModule from "../StudentsModule";
 
 const triggerStudentInsightMock = jest.fn();
+const triggerStudentInsightDemoMock = jest.fn();
+const getStudentBehaviourLogMock = jest.fn();
+const createStudentBehaviourLogEntryMock = jest.fn();
 const getAttendanceSummaryMock = jest.fn();
 const getAssessmentResultsMock = jest.fn();
 const getParentLinksMock = jest.fn();
@@ -22,6 +25,12 @@ jest.mock("../../services/studentsService", () => ({
   getStudentsBySectionId: jest.fn(),
   triggerStudentInsight: (...args: unknown[]) =>
     triggerStudentInsightMock(...args),
+  getStudentBehaviourLog: (...args: unknown[]) =>
+    getStudentBehaviourLogMock(...args),
+  createStudentBehaviourLogEntry: (...args: unknown[]) =>
+    createStudentBehaviourLogEntryMock(...args),
+  triggerStudentInsightDemo: (...args: unknown[]) =>
+    triggerStudentInsightDemoMock(...args),
 }));
 
 jest.mock("../../services/attendanceService", () => ({
@@ -42,6 +51,9 @@ describe("StudentsModule insight trigger", () => {
 
   beforeEach(() => {
     triggerStudentInsightMock.mockReset();
+    triggerStudentInsightDemoMock.mockReset();
+    getStudentBehaviourLogMock.mockReset();
+    createStudentBehaviourLogEntryMock.mockReset();
     getAttendanceSummaryMock.mockReset();
     getAssessmentResultsMock.mockReset();
     getParentLinksMock.mockReset();
@@ -49,6 +61,41 @@ describe("StudentsModule insight trigger", () => {
     getAttendanceSummaryMock.mockResolvedValue(null);
     getAssessmentResultsMock.mockResolvedValue({ results: [] });
     getParentLinksMock.mockResolvedValue([]);
+    getStudentBehaviourLogMock.mockResolvedValue([
+      {
+        id: "behaviour-1",
+        type: "incident",
+        title: "Late assignment submission",
+        description: "Submitted work after the deadline.",
+        severity: "MEDIUM",
+        teacherName: "Abebe T.",
+        source: "Teacher Incident",
+        occurredAt: "2026-05-12T08:00:00Z",
+        createdAt: "2026-05-12T08:00:00Z",
+      },
+      {
+        id: "behaviour-2",
+        type: "remark",
+        title: "Positive participation",
+        description: "Actively participated and supported peers in class.",
+        severity: "LOW",
+        teacherName: "Sarah J.",
+        source: "Teacher Remark",
+        occurredAt: "2026-05-15T08:00:00Z",
+        createdAt: "2026-05-15T08:00:00Z",
+      },
+    ]);
+    createStudentBehaviourLogEntryMock.mockResolvedValue({
+      id: "behaviour-3",
+      type: "incident",
+      title: "New incident",
+      description: "Context",
+      severity: "HIGH",
+      teacherName: "Teacher",
+      source: "Teacher Incident",
+      occurredAt: "2026-06-01T08:00:00Z",
+      createdAt: "2026-06-01T08:00:00Z",
+    });
   });
 
   afterEach(() => {
@@ -108,6 +155,30 @@ describe("StudentsModule insight trigger", () => {
     expect(container?.textContent).toContain(
       "Insight generated and delivered through the parent notification flow.",
     );
+  });
+
+  it("loads behaviour log entries for the selected student", async () => {
+    renderComponent();
+
+    const studentRow = Array.from(container?.querySelectorAll("tr") ?? []).find(
+      (row) => row.textContent?.includes("Liya Tadesse"),
+    );
+
+    act(() => {
+      studentRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const behaviourTab = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("Behaviour"),
+    );
+
+    act(() => {
+      behaviourTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(getStudentBehaviourLogMock).toHaveBeenCalled();
+    expect(container?.textContent).toContain("Late assignment submission");
+    expect(container?.textContent).toContain("Positive participation");
   });
 
   it("renders the no-signal message returned by the backend", async () => {

@@ -33,7 +33,7 @@ import {
   Atom,
   FlaskConical,
   Hexagon,
-  Sparkles,
+  Check,
   User,
   Pencil,
   LogOut,
@@ -68,7 +68,6 @@ import {
   getTeacherSections,
 } from "../services";
 import {
-  bulkSubmitAttendance,
   createAttendanceRecord,
   getAttendanceBySectionDate,
   updateAttendanceRecord,
@@ -404,6 +403,9 @@ export default function App() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
     null,
   );
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [globalGrade, setGlobalGrade] = useState("");
   const [globalSection, setGlobalSection] = useState("");
@@ -443,7 +445,6 @@ export default function App() {
   const selectedDateISO = toLocalISODate(selectedDate);
   const todayISO = toLocalISODate(new Date());
   const isSelectedDateReadOnly = selectedDateISO > todayISO;
-  const isSelectedDateToday = selectedDateISO === todayISO;
   const isAttendanceReadOnly = !isHomeroomTeacher;
   const cantEdit = isAttendanceReadOnly || selectedDateISO !== todayISO;
 
@@ -1007,6 +1008,7 @@ export default function App() {
     let cancelled = false;
     const date = selectedDateISO;
     const dateKey = selectedDate.toDateString();
+    setSelectedStudentIds(new Set());
 
     (async () => {
       try {
@@ -1192,38 +1194,64 @@ export default function App() {
       return;
     }
 
+    // No local ID — check the server for an existing record before creating a duplicate
     const existingRemarks = attendance[dateKey]?.[studentId]?.remarks;
-    void createAttendanceRecord({
-      academic_year: activeSection.academicYearId,
-      section: activeSection.sectionId,
-      student: studentId,
-      date,
-      status: apiStatus,
-      remarks: existingRemarks,
-    })
-      .then((record) => {
-        if (!record) return;
-        setAttendance((prev) => {
-          const currentDay = prev[dateKey] || {};
-          if (!currentDay[studentId]) return prev;
-          return {
-            ...prev,
-            [dateKey]: {
-              ...currentDay,
-              [studentId]: {
-                status: currentDay[studentId].status,
-                id: record.id,
-                remarks: currentDay[studentId].remarks,
-                needsReason: currentDay[studentId].needsReason,
+    void (async () => {
+      try {
+        const serverRecords = await getAttendanceBySectionDate(
+          activeSection.sectionId,
+          date,
+        );
+        const existing = serverRecords.find((r) => r.student === studentId);
+        if (existing?.id) {
+          await updateAttendanceRecord(existing.id, { status: apiStatus });
+          setAttendance((prev) => {
+            const currentDay = prev[dateKey] || {};
+            const current = currentDay[studentId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [dateKey]: {
+                ...currentDay,
+                [studentId]: { ...current, id: existing.id },
               },
-            },
-          };
-        });
-      })
-      .catch((error) => {
-        console.error("❌ Failed to create attendance record:", error);
-        pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+            };
+          });
+          return;
+        }
+      } catch {
+        // Fall through to create if fetch fails
+      }
+
+      const record = await createAttendanceRecord({
+        academic_year: activeSection.academicYearId,
+        section: activeSection.sectionId,
+        student: studentId,
+        date,
+        status: apiStatus,
+        remarks: existingRemarks,
       });
+      if (!record) return;
+      setAttendance((prev) => {
+        const currentDay = prev[dateKey] || {};
+        if (!currentDay[studentId]) return prev;
+        return {
+          ...prev,
+          [dateKey]: {
+            ...currentDay,
+            [studentId]: {
+              status: currentDay[studentId].status,
+              id: record.id,
+              remarks: currentDay[studentId].remarks,
+              needsReason: currentDay[studentId].needsReason,
+            },
+          },
+        };
+      });
+    })().catch((error) => {
+      console.error("❌ Failed to save attendance:", error);
+      pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+    });
   };
 
   const saveAttendanceRemarks = async (studentId: string, remarks: string) => {
@@ -1261,15 +1289,21 @@ export default function App() {
       if (entry.id) {
         await updateAttendanceRecord(entry.id, { remarks, status: apiStatus });
       } else {
-        const record = await createAttendanceRecord({
-          academic_year: activeSection.academicYearId,
-          section: activeSection.sectionId,
-          student: studentId,
-          date,
-          status: apiStatus,
-          remarks,
-        });
-        if (record?.id) {
+        // No local ID — check the server for an existing record before creating a duplicate
+        let existingId: string | null = null;
+        try {
+          const serverRecords = await getAttendanceBySectionDate(
+            activeSection.sectionId,
+            date,
+          );
+          const existing = serverRecords.find((r) => r.student === studentId);
+          if (existing?.id) existingId = existing.id;
+        } catch {
+          // Fall through to create if fetch fails
+        }
+
+        if (existingId) {
+          await updateAttendanceRecord(existingId, { remarks, status: apiStatus });
           setAttendance((prev) => {
             const currentDay = prev[dateKey] || {};
             const current = currentDay[studentId];
@@ -1278,10 +1312,33 @@ export default function App() {
               ...prev,
               [dateKey]: {
                 ...currentDay,
-                [studentId]: { ...current, id: record.id },
+                [studentId]: { ...current, id: existingId },
               },
             };
           });
+        } else {
+          const record = await createAttendanceRecord({
+            academic_year: activeSection.academicYearId,
+            section: activeSection.sectionId,
+            student: studentId,
+            date,
+            status: apiStatus,
+            remarks,
+          });
+          if (record?.id) {
+            setAttendance((prev) => {
+              const currentDay = prev[dateKey] || {};
+              const current = currentDay[studentId];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [dateKey]: {
+                  ...currentDay,
+                  [studentId]: { ...current, id: record.id },
+                },
+              };
+            });
+          }
         }
       }
       pushToast("success", "Remarks saved.");
@@ -1290,49 +1347,167 @@ export default function App() {
     }
   };
 
-  const markAllPresent = () => {
-    if (cantEdit) return;
+  const toggleStudentSelection = (studentId: string) => {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
     const dateKey = selectedDate.toDateString();
+    const filtered = sectionStudents.filter((s) => {
+      if (attendanceFilter === "all" || attendanceView !== "Day") return true;
+      return (
+        attendance[dateKey]?.[s.id]?.status === attendanceFilter ||
+        (attendanceFilter === "absent" &&
+          isAbsentLike(attendance[dateKey]?.[s.id]?.status))
+      );
+    });
+    const allIds = filtered.map((s) => s.id);
+    const allSelected =
+      allIds.length > 0 && allIds.every((id) => selectedStudentIds.has(id));
+    setSelectedStudentIds(allSelected ? new Set() : new Set(allIds));
+  };
+
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+  const markSelectedStudents = (targetStatus: "present" | "absent") => {
+    if (cantEdit || selectedStudentIds.size === 0 || !activeSection) return;
+    const dateKey = selectedDate.toDateString();
+    const date = selectedDateISO;
+    const apiStatus = targetStatus.toUpperCase() as
+      | "PRESENT"
+      | "ABSENT"
+      | "LATE"
+      | "EXCUSED";
+
+    const ids = Array.from(selectedStudentIds);
+    setSelectedStudentIds(new Set());
+    setBulkSubmitting(true);
+
+    // Optimistic local state update
     setAttendance((prev) => {
-      const nextDay = { ...(prev[dateKey] || {}) };
-      sectionStudents.forEach((s) => {
-        nextDay[s.id] = { status: "present" };
+      const currentDay = { ...(prev[dateKey] || {}) };
+      ids.forEach((sid) => {
+        const existing = currentDay[sid];
+        currentDay[sid] = {
+          status: targetStatus,
+          id: existing?.id,
+          remarks: existing?.remarks,
+          needsReason: existing?.needsReason,
+        };
       });
-      return { ...prev, [dateKey]: nextDay };
+      return { ...prev, [dateKey]: currentDay };
     });
 
-    if (!activeSection) return;
-    const date = selectedDateISO;
-    void bulkSubmitAttendance({
-      section: activeSection.sectionId,
-      academic_year: activeSection.academicYearId,
-      date,
-      records: sectionStudents.map((student) => ({
-        student: student.id,
-        status: "PRESENT" as const,
-      })),
-    })
-      .then((records) => {
-        if (records.length === 0) return;
-        setAttendance((prev) => {
-          const currentDay = prev[dateKey] || {};
-          const updatedDay = { ...currentDay };
-          records.forEach((record) => {
-            const existing = updatedDay[record.student];
-            if (!existing) return;
-            updatedDay[record.student] = {
-              status: existing.status,
-              id: record.id,
-              remarks: existing.remarks,
-              needsReason: existing.needsReason,
-            };
+    // Separate students into those with local IDs (PATCH) and without (fetch server or POST)
+    const localDay = attendance[dateKey] || {};
+    const toPatch: { sid: string; id: string }[] = [];
+    const needServerCheck: string[] = [];
+
+    ids.forEach((sid) => {
+      const localId = localDay[sid]?.id;
+      if (localId) {
+        toPatch.push({ sid, id: localId });
+      } else {
+        needServerCheck.push(sid);
+      }
+    });
+
+    void (async () => {
+      // Fetch server records only for students missing local IDs
+      let serverMap = new Map<string, string>();
+      if (needServerCheck.length > 0) {
+        try {
+          const serverRecords = await getAttendanceBySectionDate(
+            activeSection.sectionId,
+            date,
+          );
+          serverRecords.forEach((r) => {
+            if (r.id && needServerCheck.includes(r.student)) {
+              serverMap.set(r.student, r.id);
+            }
           });
-          return { ...prev, [dateKey]: updatedDay };
-        });
-      })
+        } catch {
+          // Will POST for all students without local IDs
+        }
+      }
+
+      const results = await Promise.allSettled([
+        // PATCH existing records
+        ...toPatch.map(async ({ sid, id }) => {
+          await updateAttendanceRecord(id, { status: apiStatus });
+          return { sid, id, action: "patch" as const };
+        }),
+        // For students without local IDs, check server map
+        ...needServerCheck.map(async (sid) => {
+          const existingId = serverMap.get(sid);
+          if (existingId) {
+            await updateAttendanceRecord(existingId, { status: apiStatus });
+            setAttendance((prev) => {
+              const currentDay = prev[dateKey] || {};
+              const current = currentDay[sid];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [dateKey]: {
+                  ...currentDay,
+                  [sid]: { ...current, id: existingId },
+                },
+              };
+            });
+            return { sid, id: existingId, action: "patch" as const };
+          }
+          // Truly new — POST
+          const record = await createAttendanceRecord({
+            academic_year: activeSection.academicYearId,
+            section: activeSection.sectionId,
+            student: sid,
+            date,
+            status: apiStatus,
+          });
+          if (record?.id) {
+            setAttendance((prev) => {
+              const currentDay = prev[dateKey] || {};
+              const current = currentDay[sid];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [dateKey]: {
+                  ...currentDay,
+                  [sid]: { ...current, id: record.id },
+                },
+              };
+            });
+          }
+          return { sid, id: record?.id ?? null, action: "post" as const };
+        }),
+      ]);
+
+      const failed = results.filter((r) => r.status === "rejected");
+      if (failed.length > 0) {
+        console.error("❌ Some attendance saves failed:", failed);
+        pushToast(
+          "error",
+          `Failed to save attendance for ${failed.length} student(s).`,
+        );
+      }
+    })()
       .catch((error) => {
-        console.error("❌ Failed to bulk submit attendance:", error);
-        pushToast("error", formatErrorMessage(error, "Failed to save attendance."));
+        console.error("❌ Failed to save attendance:", error);
+        pushToast(
+          "error",
+          formatErrorMessage(error, "Failed to save attendance."),
+        );
+      })
+      .finally(() => {
+        setBulkSubmitting(false);
       });
   };
 
@@ -2219,18 +2394,44 @@ export default function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-4 md:gap-6">
                     {attendanceView === "Day" && (
-                      <button
-                        onClick={markAllPresent}
-                        disabled={cantEdit}
-                        className={`px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 transition-all shadow-sm flex items-center gap-2 w-full sm:w-auto ${
-                          cantEdit
-                            ? "opacity-50 cursor-not-allowed"
-                            : "hover:bg-emerald-600 hover:text-white"
-                        }`}
-                      >
-                        <Sparkles size={12} />
-                        Mark All Present
-                      </button>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        {selectedStudentIds.size > 0 && !bulkSubmitting && (
+                          <>
+                            <button
+                              onClick={() => markSelectedStudents("present")}
+                              disabled={cantEdit}
+                              className={`px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 transition-all shadow-sm flex items-center gap-2 ${
+                                cantEdit
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : "hover:bg-emerald-600 hover:text-white"
+                              }`}
+                            >
+                              <Check size={12} />
+                              Mark Present ({selectedStudentIds.size})
+                            </button>
+                            <button
+                              onClick={() => markSelectedStudents("absent")}
+                              disabled={cantEdit}
+                              className={`px-4 py-2 bg-red-50 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-red-100 transition-all shadow-sm flex items-center gap-2 ${
+                                cantEdit
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : "hover:bg-red-500 hover:text-white"
+                              }`}
+                            >
+                              <Check size={12} />
+                              Mark Absent ({selectedStudentIds.size})
+                            </button>
+                          </>
+                        )}
+                        {bulkSubmitting && (
+                          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-[#1A237E] rounded-full animate-spin" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              Saving...
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     <div className="flex items-center gap-6 flex-1 md:flex-none justify-between md:justify-end">
@@ -2304,6 +2505,50 @@ export default function App() {
                 </div>
 
                 <div className="p-2 space-y-1">
+                  {attendanceView === "Day" && sectionStudents.length > 0 && (() => {
+                    const dateKey = selectedDate.toDateString();
+                    const filtered = sectionStudents.filter((s) => {
+                      if (attendanceFilter === "all") return true;
+                      return (
+                        attendance[dateKey]?.[s.id]?.status === attendanceFilter ||
+                        (attendanceFilter === "absent" &&
+                          isAbsentLike(attendance[dateKey]?.[s.id]?.status))
+                      );
+                    });
+                    const allFilteredSelected =
+                      filtered.length > 0 &&
+                      filtered.every((s) => selectedStudentIds.has(s.id));
+                    return (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!bulkSubmitting) toggleSelectAll();
+                        }}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-xl transition-colors ${
+                          bulkSubmitting
+                            ? "opacity-50 cursor-not-allowed"
+                            : "cursor-pointer hover:bg-slate-50"
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${
+                            allFilteredSelected
+                              ? "bg-[#1A237E] border-[#1A237E]"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {allFilteredSelected && (
+                            <Check size={12} className="text-white" />
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {selectedStudentIds.size > 0
+                            ? `${selectedStudentIds.size} selected`
+                            : "Select all"}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {sectionStudents
                     .filter((s) => {
                       if (
@@ -2334,9 +2579,31 @@ export default function App() {
                             selectedStudentId === student.id
                               ? "bg-blue-50/50 border-[#1A237E]/10"
                               : "hover:bg-slate-50 border-transparent"
-                          }`}
+                          } ${selectedStudentIds.has(student.id) ? "bg-slate-50/80 border-slate-200/60" : ""}`}
                         >
                           <div className="flex items-center gap-4">
+                            {attendanceView === "Day" && (
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!bulkSubmitting)
+                                    toggleStudentSelection(student.id);
+                                }}
+                                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${
+                                  bulkSubmitting
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : "cursor-pointer"
+                                } ${
+                                  selectedStudentIds.has(student.id)
+                                    ? "bg-[#1A237E] border-[#1A237E]"
+                                    : "border-slate-300 bg-white hover:border-slate-400"
+                                }`}
+                              >
+                                {selectedStudentIds.has(student.id) && (
+                                  <Check size={12} className="text-white" />
+                                )}
+                              </div>
+                            )}
                             <div className="relative">
                               <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-black text-xs text-slate-400 shrink-0 ring-4 ring-white shadow-sm transition-transform group-hover:scale-105">
                                 {student.name
@@ -2694,15 +2961,13 @@ export default function App() {
                     })}
                 </div>
 
-                {!isAttendanceReadOnly && (attendanceView !== "Day" || isSelectedDateToday) && (
+                {!isAttendanceReadOnly && attendanceView !== "Day" && (
                   <div className="p-8 bg-slate-50/50 border-t border-slate-50">
                     <button
-                      onClick={attendanceView !== "Day" ? handleExportCSV : undefined}
+                      onClick={handleExportCSV}
                       className="w-full py-4 bg-[#1A237E] text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:bg-blue-900 transition-all"
                     >
-                      {attendanceView === "Day"
-                        ? "Submit Attendance Report"
-                        : `Export ${attendanceView}ly Summary`}
+                      Export {attendanceView}ly Summary
                     </button>
                   </div>
                 )}
