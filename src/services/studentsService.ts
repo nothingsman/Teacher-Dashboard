@@ -91,7 +91,7 @@ export interface StudentListResponse {
   results: StudentApi[];
 }
 
-export interface StudentInsightDemoTriggerResponse {
+export interface StudentInsightTriggerResponse {
   created: boolean;
   reused_existing?: boolean;
   insight_id?: string;
@@ -490,14 +490,14 @@ export async function updateStudent(
   );
 }
 
-export async function triggerStudentInsightDemo(
+export async function triggerStudentInsight(
   studentId: string,
-): Promise<StudentInsightDemoTriggerResponse> {
+): Promise<StudentInsightTriggerResponse> {
   if (IS_MOCK) {
     return {
       created: true,
       reused_existing: false,
-      insight_id: `demo-${studentId}`,
+      insight_id: `insight-${studentId}`,
       category: "ACADEMICS",
       risk_band: "LOW",
       delivery_status: "DELIVERED",
@@ -509,9 +509,9 @@ export async function triggerStudentInsightDemo(
     };
   }
 
-  return request<StudentInsightDemoTriggerResponse>(
+  return request<StudentInsightTriggerResponse>(
     "POST",
-    `/api/students/${encodeURIComponent(studentId)}/trigger-insight-demo/`,
+    `/api/students/${encodeURIComponent(studentId)}/trigger-insight/`,
   );
 }
 

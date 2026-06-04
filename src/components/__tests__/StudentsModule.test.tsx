@@ -4,6 +4,7 @@ import { createRoot, Root } from "react-dom/client";
 
 import StudentsModule from "../StudentsModule";
 
+const triggerStudentInsightMock = jest.fn();
 const triggerStudentInsightDemoMock = jest.fn();
 const getStudentBehaviourLogMock = jest.fn();
 const createStudentBehaviourLogEntryMock = jest.fn();
@@ -22,6 +23,8 @@ jest.mock("motion/react", () => ({
 
 jest.mock("../../services/studentsService", () => ({
   getStudentsBySectionId: jest.fn(),
+  triggerStudentInsight: (...args: unknown[]) =>
+    triggerStudentInsightMock(...args),
   getStudentBehaviourLog: (...args: unknown[]) =>
     getStudentBehaviourLogMock(...args),
   createStudentBehaviourLogEntry: (...args: unknown[]) =>
@@ -42,11 +45,12 @@ jest.mock("../../services/parentLinksService", () => ({
   getParentLinks: (...args: unknown[]) => getParentLinksMock(...args),
 }));
 
-describe("StudentsModule demo trigger", () => {
+describe("StudentsModule insight trigger", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
   beforeEach(() => {
+    triggerStudentInsightMock.mockReset();
     triggerStudentInsightDemoMock.mockReset();
     getStudentBehaviourLogMock.mockReset();
     createStudentBehaviourLogEntryMock.mockReset();
@@ -115,8 +119,8 @@ describe("StudentsModule demo trigger", () => {
     });
   }
 
-  it("shows the demo trigger button for a selected student and renders success feedback", async () => {
-    triggerStudentInsightDemoMock.mockResolvedValue({
+  it("shows the insight trigger button for a selected student and renders success feedback", async () => {
+    triggerStudentInsightMock.mockResolvedValue({
       created: true,
       reused_existing: false,
       category: "ACADEMICS",
@@ -137,17 +141,17 @@ describe("StudentsModule demo trigger", () => {
       studentRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const demoButton = Array.from(container?.querySelectorAll("button") ?? []).find(
-      (button) => button.textContent?.includes("Run Insight Demo"),
+    const triggerButton = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("Generate Insight"),
     );
-    expect(demoButton).toBeDefined();
+    expect(triggerButton).toBeDefined();
 
     await act(async () => {
-      demoButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      triggerButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(triggerStudentInsightDemoMock).toHaveBeenCalled();
-    expect(container?.textContent).toContain("Insight Demo");
+    expect(triggerStudentInsightMock).toHaveBeenCalled();
+    expect(container?.textContent).toContain("Insight Status");
     expect(container?.textContent).toContain(
       "Insight generated and delivered through the parent notification flow.",
     );
@@ -178,7 +182,7 @@ describe("StudentsModule demo trigger", () => {
   });
 
   it("renders the no-signal message returned by the backend", async () => {
-    triggerStudentInsightDemoMock.mockResolvedValue({
+    triggerStudentInsightMock.mockResolvedValue({
       created: false,
       reason_code: "NO_QUALIFYING_SIGNAL",
       message:
@@ -195,12 +199,12 @@ describe("StudentsModule demo trigger", () => {
       studentRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const demoButton = Array.from(container?.querySelectorAll("button") ?? []).find(
-      (button) => button.textContent?.includes("Run Insight Demo"),
+    const triggerButton = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("Generate Insight"),
     );
 
     await act(async () => {
-      demoButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      triggerButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(container?.textContent).toContain(
